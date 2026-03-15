@@ -1,13 +1,16 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import type { Route } from 'next';
 import { ArrowLeft, Flag, Star, ThumbsUp } from 'lucide-react';
 import { getComments, getReview, likeComment, likeReview, addComment } from '@/lib/mock/reviewDetail';
 import type { Comment, ReviewCardData } from '@/types/reviewCard';
 import { cn } from '@/lib/utils/cn';
 import { useAuthStore } from '@/lib/store/auth';
 import { CommentThread } from '@/components/common/CommentThread';
+import { AuthRequiredPanel } from '@/components/common/AuthRequiredPanel';
 
 function timeAgo(iso: string): string {
   const created = new Date(iso).getTime();
@@ -27,8 +30,9 @@ export default function ReviewDetailPage() {
   const [likeCount, setLikeCount] = useState(0);
 
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const canViewContent = isLoggedIn || process.env.NODE_ENV !== 'production';
   const nickname = useAuthStore((state) => state.nickname);
-  const stickyTopClass = isLoggedIn ? 'top-14 md:top-16' : 'top-[90px] md:top-[96px]';
+  const stickyTopClass = canViewContent ? 'top-14 md:top-16' : 'top-[90px] md:top-[96px]';
 
   useEffect(() => {
     if (!params?.id) return;
@@ -45,6 +49,20 @@ export default function ReviewDetailPage() {
     () => comments.reduce((sum, comment) => sum + 1 + (comment.replies?.length ?? 0), 0),
     [comments]
   );
+
+  if (!canViewContent) {
+    return (
+      <div className="min-h-screen bg-background pb-safe">
+        <div className="mx-auto max-w-3xl px-4 py-10 md:px-6">
+          <AuthRequiredPanel
+            title="후기 상세는 로그인한 유저만 볼 수 있어요"
+            description="광고 없는 실제 후기 콘텐츠는 회원만 열람할 수 있게 운영하고 있어요. 가입 후 바로 확인할 수 있어요."
+            signupHref={`/signup?next=${encodeURIComponent(`/reviews/${params?.id ?? ''}`)}` as Route}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (!review) {
     return (
@@ -68,7 +86,7 @@ export default function ReviewDetailPage() {
   };
 
   const handleAddRootComment = async (content: string) => {
-    if (!isLoggedIn || !content.trim()) return;
+    if (!canViewContent || !content.trim()) return;
     await addComment({
       reviewId: review.id,
       parentId: null,
@@ -80,7 +98,7 @@ export default function ReviewDetailPage() {
   };
 
   const handleAddReply = async (parentId: string, content: string, mentionNickname?: string | null) => {
-    if (!isLoggedIn || !content.trim()) return;
+    if (!canViewContent || !content.trim()) return;
     await addComment({
       reviewId: review.id,
       parentId,
@@ -124,29 +142,24 @@ export default function ReviewDetailPage() {
         </button>
 
         <section className="rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
-          <div className="grid gap-6 md:grid-cols-[minmax(0,1.15fr)_280px] md:gap-8">
-            <div className="space-y-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0 flex-1 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">
+                <span className="inline-flex rounded-full bg-[#FFF0EB] px-2.5 py-1 text-[11px] font-semibold leading-none text-[#FF6B35]">
                   {review.reviewType === 'enrollment'
-                    ? '등록하고 학교까지 갔어요'
+                    ? '#등록하고 학교까지 갔어요'
                     : review.reviewType === 'aftercare'
-                    ? '학교 다니면서 관리받은 후기예요'
-                    : '상담만 받았어요'}
+                    ? '#학교 다니면서 관리받은 후기예요'
+                    : '#상담만 받았어요'}
                 </span>
-                {review.isDirectlyConfirmed ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                    직접 확인됨
-                  </span>
-                ) : null}
-                {review.isVerified ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700">
-                    인증된 후기
+                {review.isDirectlyConfirmed || review.isVerified ? (
+                  <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold leading-none text-emerald-700">
+                    #인증 완료
                   </span>
                 ) : null}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-1.5 text-caption text-muted-foreground">
                 <span className="font-semibold text-foreground">{review.authorNickname}</span>
                 <span>·</span>
                 <span>{review.year}년</span>
@@ -156,104 +169,127 @@ export default function ReviewDetailPage() {
                     <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent">{review.purpose}</span>
                   </>
                 ) : null}
+                <span>·</span>
+                <span>작성일 {timeAgo(review.createdAt)}</span>
               </div>
 
-              <div className="pt-1">
-                <p className="text-sm text-muted-foreground">유학원</p>
-                <p className="text-xl font-bold text-foreground">{review.agencyName}</p>
-              </div>
-
-              <div className="flex items-center gap-1.5 pt-1">
-                <Star className="h-4 w-4 fill-accent text-accent" />
-                <span className="font-bold text-foreground">{review.rating.toFixed(1)}</span>
-                <span className="text-caption text-muted-foreground">· 작성일 {timeAgo(review.createdAt)}</span>
+              <div>
+                {review.agencySlug ? (
+                  <Link
+                    href={`/au/agency/${review.agencySlug}`}
+                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-accent"
+                  >
+                    {review.agencyName}
+                  </Link>
+                ) : (
+                  <p className="text-sm font-medium text-muted-foreground">{review.agencyName}</p>
+                )}
               </div>
             </div>
 
-            <aside className="rounded-xl border border-orange-200/70 bg-gradient-to-br from-orange-50 to-amber-50 p-4">
-              <p className="mb-2 text-xs font-semibold tracking-[0.02em] text-orange-700">한줄평</p>
-              <p className="text-[15px] font-semibold leading-relaxed text-orange-950">“{review.summary}”</p>
-              {review.extraCost.exists && review.extraCost.types.length > 0 ? (
-                <div className="mt-4 border-t border-orange-200/60 pt-3">
-                  <p className="mb-2 text-xs font-semibold text-orange-700">추가 비용</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {review.extraCost.types.map((type) => (
-                      <span key={type} className="rounded-full bg-white/70 px-2.5 py-1 text-[11px] text-gray-600">
-                        {type}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="mt-2 text-caption text-gray-600">
-                    {review.extraCost.isPublic && review.extraCost.amount && review.extraCost.currency
-                      ? `${review.extraCost.amount} ${review.extraCost.currency} 공개`
-                      : '금액 비공개'}
-                  </p>
+            <aside className="w-full md:w-[132px] md:flex-shrink-0">
+              <section className="rounded-xl border border-border bg-muted/20 p-3">
+                <p className="text-[10px] font-medium text-muted-foreground">평점</p>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <Star className="h-4 w-4 fill-accent text-accent" />
+                  <span className="text-xl font-black text-foreground">{review.rating.toFixed(1)}</span>
                 </div>
-              ) : null}
+              </section>
             </aside>
           </div>
 
           <div className="my-5 h-px bg-border/80" />
 
-          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_220px] md:gap-8">
-            <div>
-              {review.prosTags.length > 0 || review.prosText ? (
-                <div className="space-y-3">
-                  <h2 className="text-sm font-semibold text-foreground">✅ 좋았던 점</h2>
-                  {review.prosTags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {review.prosTags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-green-200 bg-green-50 px-3 py-1 text-sm font-semibold text-green-700"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {review.prosText ? (
+          <div className="space-y-6">
+            {(review.prosText || review.consText) ? (
+              <div className="space-y-5">
+                {review.prosText ? (
+                  <section className="rounded-xl border border-border bg-card p-4">
+                    <h2 className="mb-2 text-sm font-semibold text-foreground">✅ 장점</h2>
                     <p className="whitespace-pre-line text-body2 leading-relaxed text-foreground">{review.prosText}</p>
-                  ) : null}
-                </div>
-              ) : null}
+                  </section>
+                ) : null}
 
-              {review.consTags.length > 0 || review.consText ? (
-                <div className={cn('space-y-3', review.prosTags.length > 0 || review.prosText ? 'mt-6' : '')}>
-                  <h2 className="text-sm font-semibold text-foreground">😅 아쉬웠던 점</h2>
-                  {review.consTags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {review.consTags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-sm font-semibold text-red-600"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {review.consText ? (
+                {review.consText ? (
+                  <section className="rounded-xl border border-border bg-card p-4">
+                    <h2 className="mb-2 text-sm font-semibold text-foreground">😅 단점</h2>
                     <p className="whitespace-pre-line text-body2 leading-relaxed text-foreground">{review.consText}</p>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="space-y-3 rounded-xl bg-muted/30 p-4">
-              <p className="text-xs font-semibold tracking-[0.02em] text-muted-foreground">한눈에 보기</p>
-              <div className="space-y-2 text-body2 text-muted-foreground">
-                <p>
-                  <span className="font-semibold text-foreground">{review.prosTags.length}</span>개 좋았던 포인트
-                </p>
-                <p>
-                  <span className="font-semibold text-foreground">{review.consTags.length}</span>개 아쉬운 포인트
-                </p>
-                <p>
-                  <span className="font-semibold text-foreground">{totalCommentCount}</span>개 댓글
-                </p>
+                  </section>
+                ) : null}
               </div>
-            </div>
+            ) : null}
+
+            {(review.prosTags.length > 0 || review.consTags.length > 0 || review.extraCost.exists || Boolean(review.summary)) ? (
+              <section className="rounded-xl border border-border bg-muted/20 p-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">좋았던 점</p>
+                    {review.prosTags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {review.prosTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[12px] font-semibold text-green-700"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-caption text-muted-foreground">선택 항목 없음</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">아쉬웠던 점</p>
+                    {review.consTags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {review.consTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[12px] font-semibold text-red-600"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-caption text-muted-foreground">선택 항목 없음</p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-4 border-t border-border/70 pt-3">
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">추가 비용</p>
+                  {review.extraCost.exists && review.extraCost.types.length > 0 ? (
+                    <>
+                      <div className="flex flex-wrap gap-1.5">
+                        {review.extraCost.types.map((type) => (
+                          <span
+                            key={type}
+                            className="rounded-full border border-border bg-white px-2.5 py-1 text-[12px] text-foreground"
+                          >
+                            {type}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-caption text-muted-foreground">
+                        {review.extraCost.isPublic && review.extraCost.amount && review.extraCost.currency
+                          ? `${review.extraCost.amount} ${review.extraCost.currency} 공개`
+                          : '금액 비공개'}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-caption text-muted-foreground">추가 비용 없음</p>
+                  )}
+                </div>
+                {review.summary ? (
+                  <div className="mt-4 border-t border-border/70 pt-3">
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">한줄평</p>
+                    <p className="text-body2 font-semibold leading-relaxed text-foreground">“{review.summary}”</p>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
           </div>
 
           <div className="my-5 h-px bg-border/80" />

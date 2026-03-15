@@ -1,9 +1,13 @@
+'use client';
+
 import Link from 'next/link';
 import Image from 'next/image';
 import { Star, MapPin, ChevronRight } from 'lucide-react';
+import type { Route } from 'next';
 import type { Entity } from '@/types/entity';
 import { QeacVerifiedBadge } from '@/components/entity/QeacVerifiedBadge';
 import { getAgencyAiSummary } from '@/lib/mock/agencyAiSummary';
+import { useAuthStore } from '@/lib/store/auth';
 
 interface Props {
   entity: Entity;
@@ -12,10 +16,15 @@ interface Props {
 }
 
 export function EntityCard({ entity, country = 'au', category = 'agency' }: Props) {
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const canViewContent = isLoggedIn || process.env.NODE_ENV !== 'production';
   const aiSummary = getAgencyAiSummary(entity.id);
+  const detailHref = `/${country}/${category}/${entity.slug}` as Route;
+  const signupHref = `/signup?next=${encodeURIComponent(detailHref)}` as Route;
+  const href = canViewContent ? detailHref : signupHref;
 
   return (
-    <Link href={`/${country}/${category}/${entity.slug}`}>
+    <Link href={href}>
       <article className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-card to-[#fbfcfd] p-4 shadow-[0_8px_22px_rgba(0,0,0,0.05)] transition-all hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(0,0,0,0.08)]">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-3 pr-1">
@@ -69,15 +78,28 @@ export function EntityCard({ entity, country = 'au', category = 'agency' }: Prop
           ))}
         </div>
 
-        {aiSummary ? (
-          <div className="mb-1 rounded-xl border border-border/70 bg-background px-3 py-2">
-            <p className="mb-1 text-[11px] font-semibold text-accent">AI 한줄 요약</p>
-            <p className="line-clamp-2 text-body2 text-muted-foreground">{aiSummary}</p>
-          </div>
-        ) : null}
+        <div className="mb-1 min-h-[72px]">
+          {aiSummary ? (
+            <div className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-background px-3 py-2">
+              <p className="mb-1 text-[11px] font-semibold text-accent">AI 한줄 요약</p>
+              <p
+                className={
+                  canViewContent ? 'line-clamp-2 text-body2 text-muted-foreground' : 'line-clamp-2 blur-[6px] select-none text-body2 text-muted-foreground'
+                }
+              >
+                {aiSummary}
+              </p>
+              {!canViewContent ? (
+                <div className="absolute inset-x-0 bottom-2 flex justify-center">
+                  <span className="rounded-full bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-accent shadow-sm">로그인 후 확인 가능</span>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
 
         <div className="mt-3 inline-flex items-center gap-1 text-caption font-semibold text-accent">
-          자세히 보기
+          {canViewContent ? '자세히 보기' : '가입하고 후기 보기'}
           <ChevronRight className="h-3.5 w-3.5" />
         </div>
       </article>

@@ -1,10 +1,12 @@
 import type { MetadataRoute } from 'next';
-import { entities, schools } from '@/lib/mock-db';
+import { listEntities } from '@/lib/supabase/repositories/entities';
+import { listSchools } from '@/lib/supabase/repositories/schools';
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://yuhu.kr';
+  const [entitiesResult, schools] = await Promise.all([listEntities({ page: 1, limit: 500 }), listSchools()]);
 
-  const dynamic = entities.map((entity) => ({
+  const dynamic = entitiesResult.items.map((entity) => ({
     url: `${site}/au/agency/${entity.slug}`,
     lastModified: new Date(entity.updated_at)
   }));

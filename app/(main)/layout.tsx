@@ -6,7 +6,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="mx-auto max-w-layout">{children}</main>
+      <main>{children}</main>
       <Footer />
       <BottomNav />
     </div>

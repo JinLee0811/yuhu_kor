@@ -13,6 +13,8 @@ npm run dev
 
 `.env.example`을 참고해 `.env.local`을 작성하세요.
 
+Supabase 전환 체크리스트와 콘솔 설정은 `SUPABASE_SETUP.md`를 보면 됩니다.
+
 ## 현재 구현 범위
 
 - App Router 기반 라우팅 (`/`, `/au/agency`, `/au/agency/[slug]`, `/reviews/write`, `/login`, `/mypage`)
@@ -27,5 +29,6 @@ npm run dev
 
 ## 참고
 
-- 현재 API는 `lib/mock-db.ts` 기반 목업 데이터로 동작합니다.
-- Supabase 실DB 연동 시 API route 내부를 Supabase query로 교체하면 됩니다.
+- 현재 코드는 `Supabase env가 있으면 실연결`, 없으면 `mock fallback`으로 동작합니다.
+- Auth/리뷰/유학원/학교 전환 상태와 사용자 설정 순서는 `SUPABASE_SETUP.md`를 참고하세요.
+- 어드민 유학원 관리는 `profiles.role = 'admin'` 계정으로 `/admin/agencies`에서 사용할 수 있습니다.

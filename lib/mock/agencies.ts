@@ -1,6 +1,7 @@
 export interface MockAgency {
   id: string;
   slug: string;
+  display_order?: number;
   name: string;
   description: string;
   website: string;
@@ -28,6 +29,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '1',
     slug: 'ibn-edu',
+    display_order: 1,
     name: 'IBN유학',
     description:
       '호주 맥쿼리대학교 선정 최우수 유학원. 시드니 본사, 서울 강남 운영. 약대/간호/IT/어학연수/조기유학 전문.',
@@ -54,6 +56,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '2',
     slug: 'uhak-station',
+    display_order: 2,
     name: '유학스테이션',
     description: '호주 공식입학처. 강남/세종/시드니/멜버른 운영. 어학연수부터 대학, TAFE, 의학/약학/간호 전문 상담.',
     website: 'https://www.uhakstation.com',
@@ -78,6 +81,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '3',
     slug: 'mkl-sydney',
+    display_order: 3,
     name: 'MKL Sydney',
     description: '시드니 현지법인 유학원. 어학연수, 전문대/대학교 입학, 비자 수속, 졸업 후 이민까지 현지에서 직접 진행.',
     website: 'https://www.mklsydney.com',
@@ -100,6 +104,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '4',
     slug: 'eduin-melbourne',
+    display_order: 4,
     name: '에듀인 유학원',
     description: '멜버른 현지 유학원. 어학연수, 대학교, 조기유학 상담. 멜버른 CBD 위치로 현지 밀착 서비스 제공.',
     website: 'https://www.eduin.com.au',
@@ -121,6 +126,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '5',
     slug: 'eduyoung',
+    display_order: 5,
     name: '에듀영 (EduYoung)',
     description: '브리즈번/골드코스트 전문 유학원. TAFE QLD 공식파트너. 어학연수, 대학진학, 조기유학 전문 상담.',
     website: 'https://eduyoung.com',
@@ -144,6 +150,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '6',
     slug: 'ybm-uhak',
+    display_order: 6,
     name: 'YBM유학센터',
     description: 'YBM 브랜드 호주 유학 전문 센터. 어학연수, 대학교 입학, 대학원, 조기유학, 워킹홀리데이 전 과정 상담.',
     website: 'https://www.ybmuhak.com',
@@ -165,6 +172,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '7',
     slug: 'topworld-uhak',
+    display_order: 7,
     name: '탑월드유학그룹',
     description: '호주유학닷컴 운영. 시드니/브리즈번/멜버른/퍼스 전 지역 커버. 어학연수, 대학, 조기유학, 워홀 전문.',
     website: 'https://hojuyuhak.co.kr',
@@ -186,6 +194,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '8',
     slug: 'iworld-study',
+    display_order: 8,
     name: '아이월드 유학',
     description: '호주 TAFE 전문 유학원. 지역별 TAFE 맞춤 상담. 영주권 연계 가능 과정 전문 안내.',
     website: 'https://www.iworldstudy.com',
@@ -207,6 +216,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '9',
     slug: 'uhak-inet',
+    display_order: 9,
     name: '유학아이넷',
     description: '호주 조기유학, 부모동반유학 전문. 대학교 입학 상담. 공립/사립학교 입학 지원 전 과정 케어.',
     website: 'http://yuhakinet.com',
@@ -228,6 +238,7 @@ export const mockAgencies: MockAgency[] = [
   {
     id: '10',
     slug: 'coei-uhak',
+    display_order: 10,
     name: '코이유학',
     description: '호주 어학연수 전문. 목적별/도시별 맞춤 어학원 선정. 워킹홀리데이 연계 프로그램 운영.',
     website: 'https://www.coei.com',

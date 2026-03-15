@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { reviews } from '@/lib/mock-db';
 import { fail, ok } from '@/lib/api';
-import { calculateWeightedScore } from '@/lib/utils/score';
-import { generateAnonymousNickname } from '@/lib/utils/nickname';
-import type { Review, ReviewType } from '@/types/review';
-import { REVIEW_SCHEMAS } from '@/lib/constants/reviewSchema';
+import type { ReviewMeta, ReviewType } from '@/types/review';
+import { createClient } from '@/lib/supabase/server';
+import { createNicknameForUser, createReviewForUser, deleteReviewForUser } from '@/lib/supabase/repositories/reviews';
+import { ensureProfile } from '@/lib/supabase/repositories/profiles';
+import { isSupabaseConfigured } from '@/lib/supabase/env';
+import { isPendingNickname } from '@/lib/profile/nickname';
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,32 +29,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(fail('INVALID_REVIEW_TEXT', '후기 입력 조건을 확인해줘요.'), { status: 400 });
     }
 
-    const score_total = calculateWeightedScore(scores, REVIEW_SCHEMAS[review_type]);
-    const now = new Date().toISOString();
+    if (!isSupabaseConfigured()) {
+      const review = await createReviewForUser('mock-user-1', createNicknameForUser(), {
+        entity_id,
+        review_type,
+        scores,
+        pros,
+        cons,
+        summary,
+        meta: (meta ?? {}) as ReviewMeta,
+        is_verified_review: Boolean(is_verified_review)
+      });
+      return NextResponse.json(ok(review), { status: 201 });
+    }
 
-    const review: Review = {
-      id: `rev-${Date.now()}`,
+    const supabase = await createClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(fail('UNAUTHORIZED', '로그인이 필요해요.'), { status: 401 });
+    }
+
+    const profile = await ensureProfile(user);
+    if (isPendingNickname(profile.nickname)) {
+      return NextResponse.json(fail('NICKNAME_REQUIRED', '후기를 남기려면 먼저 닉네임을 설정해줘요.'), { status: 400 });
+    }
+    const review = await createReviewForUser(user.id, profile.nickname, {
       entity_id,
       review_type,
-      user_id: 'user-1',
-      nickname: generateAnonymousNickname(),
       scores,
-      score_total,
       pros,
       cons,
       summary,
-      meta: (meta ?? {}) as Review['meta'],
-      helpful_count: 0,
-      is_anonymous: true,
-      is_hidden: false,
-      is_verified_review: Boolean(is_verified_review),
-      is_social_verified: true,
-      status: 'published',
-      created_at: now,
-      updated_at: now
-    };
+      meta: (meta ?? {}) as ReviewMeta,
+      is_verified_review: Boolean(is_verified_review)
+    });
 
-    reviews.unshift(review);
     return NextResponse.json(ok(review), { status: 201 });
   } catch {
     return NextResponse.json(fail('SERVER_ERROR', '후기 작성 중 오류가 발생했어요.'), { status: 500 });
@@ -66,11 +79,26 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json(fail('INVALID_REQUEST', '후기 id가 필요해요.'), { status: 400 });
   }
 
-  const index = reviews.findIndex((review) => review.id === id && review.user_id === 'user-1');
-  if (index === -1) {
-    return NextResponse.json(fail('REVIEW_NOT_FOUND', '삭제할 후기를 찾을 수 없어요.'), { status: 404 });
+  if (!isSupabaseConfigured()) {
+    const removed = await deleteReviewForUser(id, 'mock-user-1');
+    if (!removed) {
+      return NextResponse.json(fail('REVIEW_NOT_FOUND', '삭제할 후기를 찾을 수 없어요.'), { status: 404 });
+    }
+    return NextResponse.json(ok({ id: removed.id }));
   }
 
-  const [removed] = reviews.splice(index, 1);
+  const supabase = await createClient();
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json(fail('UNAUTHORIZED', '로그인이 필요해요.'), { status: 401 });
+  }
+
+  const removed = await deleteReviewForUser(id, user.id);
+  if (!removed) {
+    return NextResponse.json(fail('REVIEW_NOT_FOUND', '삭제할 후기를 찾을 수 없어요.'), { status: 404 });
+  }
   return NextResponse.json(ok({ id: removed.id }));
 }

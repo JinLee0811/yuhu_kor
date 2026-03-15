@@ -11,6 +11,7 @@ export interface ReviewCardData {
   year: number;
   purpose: string;
   agencyName: string;
+  agencySlug?: string | null;
   rating: number;
   prosTags: string[];
   consTags: string[];

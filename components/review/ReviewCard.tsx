@@ -1,10 +1,9 @@
 'use client';
 
-import { Flag, MessageCircle, Star, ThumbsUp } from 'lucide-react';
+import { ChevronRight, Flag, MessageCircle, Star, ThumbsUp } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Review } from '@/types/review';
 import { cn } from '@/lib/utils/cn';
-import { ReviewCredibilityBadge } from '@/components/review/ReviewCredibilityBadge';
 import { ReviewTypeBadge } from '@/components/review/ReviewTypeBadge';
 import { entities } from '@/lib/mock-db';
 import { useAuthStore } from '@/lib/store/auth';
@@ -125,6 +124,7 @@ export function ReviewCard({ review, compact = false, className, onClickCard, co
   const displayYear = review.meta.used_year ?? review.meta.consulted_year ?? review.meta.enrolled_year ?? 2025;
   const displayPurpose = review.meta.purpose ?? '유학 후기';
   const agencyName = entities.find((entity) => entity.id === review.entity_id)?.name ?? '유학원 정보';
+  const isCertified = Boolean(review.is_verified_review || review.is_social_verified);
 
   useEffect(() => {
     getComments(review.id).then(setComments);
@@ -190,111 +190,144 @@ export function ReviewCard({ review, compact = false, className, onClickCard, co
   return (
     <div
       className={cn(
-        'rounded-xl border border-border bg-card p-5 transition-all duration-200',
-        'hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)]',
-        compact && 'h-[312px]',
+        'rounded-xl border border-border bg-card p-4 transition-[transform,box-shadow,border-color] duration-200 will-change-transform',
+        'hover:border-[#FFDCCF] hover:shadow-[0_14px_30px_rgba(17,24,39,0.08)]',
+        compact && 'min-h-[268px] p-3 sm:min-h-[320px] sm:p-4',
         className
       )}
       onClick={onClickCard}
       role={onClickCard ? 'button' : undefined}
       tabIndex={onClickCard ? 0 : undefined}
     >
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <ReviewTypeBadge type={review.review_type} />
-        {review.is_verified_review ? <ReviewCredibilityBadge kind="verified-review" /> : null}
-        {review.is_social_verified ? <ReviewCredibilityBadge kind="social" /> : null}
-      </div>
+      <div className={cn('mb-3 space-y-1.5', compact && 'mb-2.5 space-y-1')}>
+        <div className={cn('flex items-center justify-between gap-3', compact && 'gap-2')}>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <ReviewTypeBadge type={review.review_type} />
+            {isCertified ? (
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                인증 완료
+              </span>
+            ) : null}
+          </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-foreground">{review.nickname}</span>
-        <span className="text-caption text-muted-foreground">·</span>
-        <span className="text-caption text-muted-foreground">{displayYear}년</span>
-        <span className="rounded-full bg-accent/10 px-2.5 py-1 text-[12px] font-medium text-accent">{displayPurpose}</span>
-      </div>
+          <div className={cn('flex shrink-0 items-center justify-end gap-1 rounded-md bg-accent/10 px-2 py-1', compact && 'px-1.5 py-0.5')}>
+            <div className="flex items-center justify-end gap-1">
+              <Star className="h-3 w-3 fill-accent text-accent" />
+              <span className={cn('text-[13px] font-semibold text-foreground', compact && 'text-[12px]')}>{review.score_total.toFixed(1)}</span>
+            </div>
+          </div>
+        </div>
 
-      <div className="mb-3 flex items-baseline gap-2">
-        <span className="text-caption text-muted-foreground">유학원</span>
-        <span className="text-base font-semibold text-foreground">{agencyName}</span>
-      </div>
-
-      <div className="mb-4 flex items-center gap-1.5">
-        <Star className="h-4 w-4 fill-accent text-accent" />
-        <span className="font-bold text-foreground">{review.score_total.toFixed(1)}</span>
-      </div>
-
-      <div className={cn('mb-4 space-y-3', compact && 'min-h-[142px]')}>
-        <div>
-          <span className="mb-1.5 inline-block rounded-full bg-green-100 px-2.5 py-1 text-[12px] font-semibold text-green-700">
-            좋았던 점
-          </span>
-          <p
-            className={cn(
-              'text-body2 leading-relaxed text-foreground',
-              compact ? 'line-clamp-2' : !isExpanded ? 'line-clamp-3' : ''
-            )}
-          >
-            {review.pros}
-          </p>
+        <div className={cn('flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground', compact && 'gap-1 text-[11px] sm:text-[12px]')}>
+          <span className={cn('font-medium text-foreground', compact && 'line-clamp-1')}>{review.nickname}</span>
+          <span>·</span>
+          <span>{displayYear}년</span>
+          <span>·</span>
+          <span>{displayPurpose}</span>
         </div>
 
         <div>
-          <span className="mb-1.5 inline-block rounded-full bg-red-100 px-2.5 py-1 text-[12px] font-semibold text-red-700">
-            아쉬운 점
+          <span className={cn('text-[12px] text-muted-foreground', compact && 'text-[11px] sm:text-[12px]')}>{agencyName}</span>
+        </div>
+
+        <div className={cn('flex justify-end', compact && 'pt-0.5')}>
+          <span className={cn('inline-flex items-center gap-0.5 text-[11px] font-semibold text-accent', compact && 'text-[10px] sm:text-[11px]')}>
+            자세히 보기
+            <ChevronRight className="h-3.5 w-3.5" />
           </span>
-          <p
-            className={cn(
-              'text-body2 leading-relaxed text-foreground',
-              compact ? 'line-clamp-2' : !isExpanded ? 'line-clamp-3' : ''
-            )}
-          >
-            {review.cons}
-          </p>
+        </div>
+      </div>
+
+      <div className={cn('mb-4', compact && 'mb-3 min-h-[92px] sm:min-h-[118px]')}>
+        <div className={cn('grid gap-3', compact && 'gap-2.5', !compact && 'md:grid-cols-2')}>
+          <div className={cn('rounded-lg bg-green-50/60 p-2.5', compact && 'p-2')}>
+            <span className={cn('mb-1.5 inline-block rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700', compact && 'mb-1 text-[9px] sm:text-[10px]')}>
+              좋았던 점
+            </span>
+            <p
+              className={cn(
+                'text-[12px] leading-[1.55] text-foreground',
+                compact ? 'line-clamp-2 text-[11px] leading-[1.45] sm:text-[12px] sm:leading-[1.55]' : !isExpanded ? 'line-clamp-3' : ''
+              )}
+            >
+              {review.pros}
+            </p>
+          </div>
+
+          <div className={cn('rounded-lg bg-red-50/50 p-2.5', compact && 'p-2')}>
+            <span className={cn('mb-1.5 inline-block rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700', compact && 'mb-1 text-[9px] sm:text-[10px]')}>
+              아쉬운 점
+            </span>
+            <p
+              className={cn(
+                'text-[12px] leading-[1.55] text-foreground',
+                compact ? 'line-clamp-2 text-[11px] leading-[1.45] sm:text-[12px] sm:leading-[1.55]' : !isExpanded ? 'line-clamp-3' : ''
+              )}
+            >
+              {review.cons}
+            </p>
+          </div>
         </div>
 
         {shouldShowExpand ? (
-          <button onClick={(event) => { event.stopPropagation(); setIsExpanded((prev) => !prev); }} className="text-body2 font-medium text-accent hover:underline">
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsExpanded((prev) => !prev);
+            }}
+            className="mt-2 text-[12px] font-medium text-accent hover:underline"
+          >
             {isExpanded ? '접기' : '더보기'}
           </button>
         ) : null}
       </div>
 
-      <div className="border-t border-border pt-3">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+      <div className={cn('border-t border-border pt-4', compact && 'pt-3')}>
+        <div className="flex items-center justify-between gap-3">
+          <div className={cn('flex items-center gap-2', compact && 'gap-1')}>
             <button
               onClick={handleHelpfulClick}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-2 text-body2 transition-colors',
+                'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] transition-colors',
+                compact && 'gap-1 px-2 py-1 text-[11px] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px]',
                 helpful ? 'bg-accent/10 text-accent' : 'text-muted-foreground hover:bg-muted/80'
               )}
             >
               <ThumbsUp className={cn('h-4 w-4 shrink-0', helpful && 'fill-accent')} strokeWidth={2} />
-              <span className="font-medium">도움이 됐어요 {helpCount}</span>
+              <span className="font-medium">도움 {helpCount}</span>
             </button>
 
             {commentsInteractive ? (
               <button
                 onClick={handleToggleComments}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-body2 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+                className={cn(
+                  'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground',
+                  compact && 'gap-1 px-2 py-1 text-[11px] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px]'
+                )}
               >
                 <MessageCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
-                <span className="font-medium">댓글 {totalCommentCount}개</span>
+                <span className="font-medium">댓글 {totalCommentCount}</span>
               </button>
             ) : (
-              <div className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-body2 text-muted-foreground">
+              <div className={cn('flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted-foreground', compact && 'gap-1 px-2 py-1 text-[11px] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[12px]')}>
                 <MessageCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
-                <span className="font-medium">댓글 {totalCommentCount}개</span>
+                <span className="font-medium">댓글 {totalCommentCount}</span>
               </div>
             )}
           </div>
 
-          <button
-            onClick={(event) => event.stopPropagation()}
-            className="flex items-center gap-1 rounded-lg px-2 py-2 text-caption text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-          >
-            <Flag className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-            <span>신고</span>
-          </button>
+          <div className="shrink-0">
+            <button
+              onClick={(event) => event.stopPropagation()}
+              className={cn(
+                'flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground',
+                compact && 'px-1.5 py-1 text-[10px] sm:px-2 sm:py-1.5 sm:text-[11px]'
+              )}
+            >
+              <Flag className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+              <span>신고</span>
+            </button>
+          </div>
         </div>
 
         {commentsInteractive && commentsOpen ? (
@@ -446,4 +479,3 @@ export function ReviewCard({ review, compact = false, className, onClickCard, co
     </div>
   );
 }
-

@@ -1,5 +1,4 @@
-import { entities, reviews } from '@/lib/mock-db';
-import type { Review } from '@/types/review';
+import type { ApiResponse } from '@/lib/api';
 import type { Comment, ReviewCardData } from '@/types/reviewCard';
 
 const mockCommentsStore: Comment[] = [
@@ -33,63 +32,14 @@ const mockCommentsStore: Comment[] = [
   }
 ];
 
-function mapReviewType(type: Review['review_type']): ReviewCardData['reviewType'] {
-  if (type === 'full') return 'enrollment';
-  return type;
-}
-
 export async function getReview(reviewId: string): Promise<ReviewCardData | null> {
-  const review = reviews.find((item) => item.id === reviewId);
-  if (!review) return null;
-
-  const entity = entities.find((item) => item.id === review.entity_id);
-
-  const prosTags = review.meta.pros_tags ?? [];
-  const consTags = review.meta.cons_tags ?? [];
-
-  const extra = review.meta.extra_cost ?? {
-    exists: false,
-    types: [],
-    amount: null,
-    currency: null,
-    is_public: false
-  };
-
-  const card: ReviewCardData = {
-    id: review.id,
-    reviewType: mapReviewType(review.review_type),
-    isVerified: Boolean(review.is_social_verified),
-    isDirectlyConfirmed: Boolean(review.is_verified_review),
-    authorNickname: review.nickname,
-    year: review.meta.used_year ?? review.meta.consulted_year ?? review.meta.enrolled_year ?? new Date(review.created_at).getFullYear(),
-    purpose: review.meta.purpose ?? '',
-    agencyName: entity?.name ?? '유학원 정보',
-    rating: review.score_total,
-    prosTags,
-    consTags,
-    prosText: review.meta.pros_text ?? null,
-    consText: review.meta.cons_text ?? null,
-    extraCost: {
-      exists: extra.exists,
-      types: extra.types,
-      amount: extra.amount,
-      currency: extra.currency,
-      isPublic: extra.is_public
-    },
-    summary: review.summary,
-    likeCount: review.helpful_count,
-    commentCount: mockCommentsStore.filter((c) => c.reviewId === review.id).length,
-    createdAt: review.created_at
-  };
-
-  return card;
+  const response = await fetch(`/api/v1/reviews/${reviewId}`);
+  const json: ApiResponse<ReviewCardData> = await response.json();
+  return response.ok ? json.data : null;
 }
 
 export async function likeReview(reviewId: string): Promise<void> {
-  const review = reviews.find((item) => item.id === reviewId);
-  if (review) {
-    review.helpful_count += 1;
-  }
+  await fetch(`/api/v1/reviews/${reviewId}/helpful`, { method: 'POST' });
 }
 
 export async function getComments(reviewId: string): Promise<Comment[]> {

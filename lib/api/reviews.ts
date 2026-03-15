@@ -1,41 +1,23 @@
 'use client';
 
 import { toast } from 'sonner';
-import { mockReviews } from '@/lib/mock/reviews';
-import { getMockAuth } from '@/lib/mock/auth';
+import type { ApiResponse } from '@/lib/api';
 import type { Review, ReviewFormData } from '@/types/review';
-import { calculateWeightedScore } from '@/lib/utils/score';
-import { REVIEW_SCHEMAS } from '@/lib/constants/reviewSchema';
 
 export async function submitReview(data: ReviewFormData) {
-  const { user } = getMockAuth();
-  const now = new Date().toISOString();
+  const response = await fetch('/api/v1/reviews', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(data)
+  });
+  const json: ApiResponse<Review> = await response.json();
 
-  const newReview: Review = {
-    id: `r${Date.now()}`,
-    entity_id: data.entity_id,
-    review_type: data.review_type,
-    user_id: user.id,
-    nickname: user.nickname,
-    scores: data.scores,
-    score_total: calculateWeightedScore(data.scores, REVIEW_SCHEMAS[data.review_type]),
-    pros: data.pros,
-    cons: data.cons,
-    summary: data.summary,
-    meta: data.meta,
-    helpful_count: 0,
-    is_anonymous: true,
-    is_hidden: false,
-    is_verified_review: data.is_verified_review,
-    is_social_verified: true,
-    status: 'published',
-    created_at: now,
-    updated_at: now
-  };
+  if (!response.ok || !json.data) {
+    throw new Error(json.error?.message ?? '후기 등록에 실패했어요.');
+  }
 
-  mockReviews.unshift(newReview);
-  console.log('[mock submitReview]', newReview);
   toast.success('후기가 등록됐어요!');
-
-  return { success: true, review: newReview };
+  return { success: true, review: json.data };
 }

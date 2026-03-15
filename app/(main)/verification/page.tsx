@@ -3,7 +3,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, Clock3, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store/auth';
+import type { ApiResponse } from '@/lib/api';
+import type { UserVerification } from '@/types/verification';
 
 const documentOptions = [
   { value: 'coe', label: 'COE (Confirmation of Enrolment)' },
@@ -16,10 +19,11 @@ export default function VerificationPage() {
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const verificationStatus = useAuthStore((state) => state.verificationStatus);
   const verifiedSchoolName = useAuthStore((state) => state.verifiedSchoolName);
-  const submitVerification = useAuthStore((state) => state.submitVerification);
+  const setVerificationStatus = useAuthStore((state) => state.setVerificationStatus);
 
   const [documentType, setDocumentType] = useState<(typeof documentOptions)[number]['value']>('coe');
   const [schoolName, setSchoolName] = useState(verifiedSchoolName ?? '');
+  const [loading, setLoading] = useState(false);
 
   return (
     <div className="min-h-screen bg-background pb-safe">
@@ -105,12 +109,37 @@ export default function VerificationPage() {
 
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   if (!schoolName.trim()) return;
-                  void documentType;
-                  submitVerification(schoolName.trim());
+
+                  try {
+                    setLoading(true);
+                    const response = await fetch('/api/v1/verifications', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({
+                        schoolName: schoolName.trim(),
+                        documentType
+                      })
+                    });
+                    const json: ApiResponse<UserVerification> = await response.json();
+
+                    if (!response.ok || !json.data) {
+                      throw new Error(json.error?.message ?? '인증 신청에 실패했어요.');
+                    }
+
+                    setVerificationStatus('pending', schoolName.trim());
+                    toast.success('인증 신청이 접수됐어요.');
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : '인증 신청에 실패했어요.');
+                  } finally {
+                    setLoading(false);
+                  }
                 }}
-                className="h-11 w-full rounded-lg bg-accent text-body2 font-semibold text-accent-foreground"
+                disabled={loading}
+                className="h-11 w-full rounded-lg bg-accent text-body2 font-semibold text-accent-foreground disabled:opacity-60"
               >
                 인증 신청하기
               </button>

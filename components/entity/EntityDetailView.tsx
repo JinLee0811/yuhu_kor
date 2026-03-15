@@ -3,16 +3,18 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronLeft, PenSquare, Share2, X } from 'lucide-react';
+import type { Route } from 'next';
 import type { Entity } from '@/types/entity';
 import type { Review, ReviewType } from '@/types/review';
 import { EntityDetail } from '@/components/entity/EntityDetail';
 import { ReviewList } from '@/components/review/ReviewList';
 import { useAuthStore } from '@/lib/store/auth';
-import { getTopSchoolsByAgency } from '@/lib/mock/schoolAggregations';
+import { AuthRequiredPanel } from '@/components/common/AuthRequiredPanel';
 
 interface Props {
   entity: Entity;
   reviews: Review[];
+  topSchools: Array<{ schoolId: string; schoolName: string; count: number }>;
 }
 
 const sortOptions = ['최신순', '도움순', '평점높은순', '평점낮은순'] as const;
@@ -24,14 +26,14 @@ const reviewTabs: Array<{ key: 'all' | ReviewType; label: string }> = [
   { key: 'aftercare', label: '학교 다니면서 관리받은 후기예요' }
 ];
 
-export function EntityDetailView({ entity, reviews }: Props) {
+export function EntityDetailView({ entity, reviews, topSchools }: Props) {
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const canViewContent = isLoggedIn || process.env.NODE_ENV !== 'production';
   const [sortBy, setSortBy] = useState<(typeof sortOptions)[number]>('최신순');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | ReviewType>('all');
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
-  const stickyTopClass = isLoggedIn ? 'top-14 md:top-16' : 'top-[90px] md:top-[96px]';
-  const topSchools = useMemo(() => getTopSchoolsByAgency(entity.id), [entity.id]);
+  const stickyTopClass = canViewContent ? 'top-14 md:top-16' : 'top-[90px] md:top-[96px]';
 
   const scoreItems = [
     { label: '상담은 어땠어요?', score: 4.9 },
@@ -66,6 +68,20 @@ export function EntityDetailView({ entity, reviews }: Props) {
     return Number((total / filteredByType.length).toFixed(2));
   }, [filteredByType]);
 
+  if (!canViewContent) {
+    return (
+      <div className="min-h-screen bg-background pb-safe">
+        <div className="mx-auto max-w-3xl px-4 py-10 md:px-6">
+          <AuthRequiredPanel
+            title={`${entity.name} 후기랑 자세한 정보는 회원만 볼 수 있어요`}
+            description="유학원 리스트와 기본 정보는 둘러볼 수 있지만, 실제 후기와 연결 학교, 상세 비교는 로그인 후 열려요."
+            signupHref={`/signup?next=${encodeURIComponent(`/au/agency/${entity.slug}`)}` as Route}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background pb-safe">
       <div className={`sticky z-30 flex items-center justify-between border-b border-border bg-card px-4 py-3 md:hidden ${stickyTopClass}`}>
@@ -78,9 +94,11 @@ export function EntityDetailView({ entity, reviews }: Props) {
         </button>
       </div>
 
-      <div className="mx-auto max-w-layout lg:grid lg:grid-cols-[40%_60%] lg:gap-8">
-        <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <EntityDetail entity={entity} scoreItems={scoreItems} />
+      <div className="mx-auto max-w-layout lg:grid lg:grid-cols-[40%_60%] lg:gap-8 lg:pt-4">
+        <div className="space-y-4">
+          <div className="lg:sticky lg:top-28">
+            <EntityDetail entity={entity} scoreItems={scoreItems} />
+          </div>
           <section className="border-b border-border bg-card p-4 md:p-6 lg:rounded-xl lg:border">
             <div className="mb-3">
               <h3 className="font-semibold text-foreground">이 유학원이 많이 보낸 학교</h3>
@@ -114,8 +132,8 @@ export function EntityDetailView({ entity, reviews }: Props) {
           </section>
         </div>
 
-        <div className="px-4 py-6 md:px-6 lg:px-0 lg:py-0">
-          <div className="mb-4 rounded-lg border border-border bg-card p-3 text-body2 text-muted-foreground">
+        <div className="px-4 py-6 md:px-6 lg:px-0 lg:pb-0 lg:pt-6">
+          <div className="mb-4 rounded-lg border border-border bg-card p-3 text-body2 text-muted-foreground lg:mb-5">
             유후는 광고비 받고 후기 지우는 거 없어요. 약속할게요.{' '}
             <button onClick={() => setIsPolicyOpen(true)} className="font-semibold text-accent hover:underline">
               자세히 알아보기

@@ -3,6 +3,7 @@ export interface Entity {
   slug: string;
   category_id: string;
   region_id?: string;
+  display_order?: number;
   name: string;
   description?: string;
   address?: string;

@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { entities, reviews } from '@/lib/mock-db';
 import { EntityDetailView } from '@/components/entity/EntityDetailView';
+import { getEntityByIdOrSlug, listEntities } from '@/lib/supabase/repositories/entities';
+import { listEntityReviews } from '@/lib/supabase/repositories/reviews';
+import { getTopSchoolsByAgency } from '@/lib/supabase/repositories/aggregations';
 
 interface Params {
   country: string;
@@ -10,7 +12,7 @@ interface Params {
 }
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  const entity = entities.find((item) => item.slug === params.slug);
+  const entity = await getEntityByIdOrSlug(params.slug);
 
   if (!entity) {
     return {
@@ -29,15 +31,16 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   };
 }
 
-export function generateStaticParams() {
-  return entities.map((entity) => ({ country: 'au', category: 'agency', slug: entity.slug }));
+export async function generateStaticParams() {
+  const result = await listEntities({ page: 1, limit: 200 });
+  return result.items.map((entity) => ({ country: 'au', category: 'agency', slug: entity.slug }));
 }
 
-export default function EntityDetailPage({ params }: { params: Params }) {
-  const entity = entities.find((item) => item.slug === params.slug);
+export default async function EntityDetailPage({ params }: { params: Params }) {
+  const entity = await getEntityByIdOrSlug(params.slug);
   if (!entity) notFound();
 
-  const entityReviews = reviews.filter((review) => review.entity_id === entity.id);
+  const [entityReviewsResult, topSchools] = await Promise.all([listEntityReviews(entity.id), getTopSchoolsByAgency(entity.id)]);
 
-  return <EntityDetailView entity={entity} reviews={entityReviews} />;
+  return <EntityDetailView entity={entity} reviews={entityReviewsResult.items} topSchools={topSchools} />;
 }

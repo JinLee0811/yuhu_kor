@@ -2,16 +2,19 @@
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import type { Route } from 'next';
 import { ChevronLeft, Search } from 'lucide-react';
+import { toast } from 'sonner';
 import { StarRating } from '@/components/review/StarRating';
 import { FileUpload } from '@/components/review/FileUpload';
 import { REVIEW_SCHEMAS } from '@/lib/constants/reviewSchema';
-import { getAgencies } from '@/lib/api/agencies';
 import { submitReview } from '@/lib/api/reviews';
-import type { MockAgency } from '@/lib/mock/agencies';
+import type { ApiResponse } from '@/lib/api';
+import type { Entity } from '@/types/entity';
 import type { ReviewFormData, ReviewMeta, ReviewType } from '@/types/review';
 import { cn } from '@/lib/utils/cn';
 import { findSchoolIdByText } from '@/lib/mock/schoolAggregations';
+import { useAuthStore } from '@/lib/store/auth';
 
 const reviewTypeCards: Array<{ type: ReviewType; icon: string; label: string; desc: string }> = [
   { type: 'consultation', icon: '💬', label: '상담만 받았어요', desc: '상담만 받았거나 등록 안 한 경우' },
@@ -87,9 +90,12 @@ const SUMMARY_PLACEHOLDERS = [
 function WriteReviewPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isReady = useAuthStore((state) => state.isReady);
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const hasNickname = useAuthStore((state) => state.hasNickname);
 
   const [step, setStep] = useState(1);
-  const [agencies, setAgencies] = useState<MockAgency[]>([]);
+  const [agencies, setAgencies] = useState<Entity[]>([]);
   const [showAgencyResult, setShowAgencyResult] = useState(false);
   const [agencyKeyword, setAgencyKeyword] = useState('');
   const [selectedAgencyId, setSelectedAgencyId] = useState('');
@@ -129,9 +135,15 @@ function WriteReviewPageContent() {
   const [verificationFile, setVerificationFile] = useState('');
 
   useEffect(() => {
-    getAgencies({ limit: 100 }).then((result) => {
-      setAgencies(result.items);
-    });
+    const loadEntities = async () => {
+      const response = await fetch('/api/v1/entities?limit=100');
+      const json: ApiResponse<{ items: Entity[] }> = await response.json();
+      if (response.ok && json.data?.items) {
+        setAgencies(json.data.items);
+      }
+    };
+
+    void loadEntities();
   }, []);
 
   useEffect(() => {
@@ -144,6 +156,12 @@ function WriteReviewPageContent() {
     setSelectedAgencyId(agency.id);
     setAgencyKeyword(agency.name);
   }, [searchParams, agencies]);
+
+  useEffect(() => {
+    if (!isReady || !isLoggedIn || hasNickname) return;
+    const next = `/reviews/write${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    router.replace(`/nickname?next=${encodeURIComponent(next)}` as Route);
+  }, [hasNickname, isLoggedIn, isReady, router, searchParams]);
 
   const filteredAgencies = useMemo(() => {
     if (!agencyKeyword.trim()) return agencies;
@@ -278,9 +296,13 @@ function WriteReviewPageContent() {
       is_verified_review: Boolean(verificationFile)
     };
 
-    const result = await submitReview(payload);
-    if (result.success) {
-      router.push(`/au/agency/${selectedAgency?.slug ?? ''}`);
+    try {
+      const result = await submitReview(payload);
+      if (result.success) {
+        router.push(`/au/agency/${selectedAgency?.slug ?? ''}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '후기 등록에 실패했어요.');
     }
   };
 

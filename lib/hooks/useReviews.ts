@@ -49,3 +49,28 @@ export function useDeleteReview() {
     }
   });
 }
+
+export function useUpdateReview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { id: string; summary: string; pros: string; cons: string }) => {
+      const res = await fetch(`/api/v1/reviews/${input.id}/owner`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          summary: input.summary,
+          pros: input.pros,
+          cons: input.cons
+        })
+      });
+      const json: ApiResponse<Review> = await res.json();
+      if (!res.ok || !json.data) throw new Error(json.error?.message ?? '후기 수정 실패');
+      return json.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-reviews'] });
+    }
+  });
+}

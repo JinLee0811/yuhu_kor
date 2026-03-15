@@ -1,15 +1,15 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { schools } from '@/lib/mock-db';
-import { getTopAgenciesBySchool } from '@/lib/mock/schoolAggregations';
 import { SchoolDetailView } from '@/components/school/SchoolDetailView';
+import { listSchools, getSchoolById } from '@/lib/supabase/repositories/schools';
+import { getTopAgenciesBySchool } from '@/lib/supabase/repositories/aggregations';
 
 interface Params {
   schoolId: string;
 }
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  const school = schools.find((item) => item.id === params.schoolId);
+  const school = await getSchoolById(params.schoolId);
 
   if (!school) {
     return {
@@ -23,15 +23,16 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   };
 }
 
-export function generateStaticParams() {
+export async function generateStaticParams() {
+  const schools = await listSchools();
   return schools.map((school) => ({ schoolId: school.id }));
 }
 
-export default function SchoolDetailPage({ params }: { params: Params }) {
-  const school = schools.find((item) => item.id === params.schoolId);
+export default async function SchoolDetailPage({ params }: { params: Params }) {
+  const school = await getSchoolById(params.schoolId);
   if (!school) notFound();
 
-  const topAgencies = getTopAgenciesBySchool(school.id);
+  const topAgencies = await getTopAgenciesBySchool(school.id);
 
   return <SchoolDetailView school={school} topAgencies={topAgencies} />;
 }

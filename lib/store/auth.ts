@@ -1,61 +1,63 @@
 'use client';
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { mockUserVerifications } from '@/lib/mock/verifications';
 
 interface AuthState {
+  isReady: boolean;
   isLoggedIn: boolean;
   userId: string | null;
+  email: string | null;
   nickname: string;
+  hasNickname: boolean;
+  role: 'user' | 'admin';
   verificationStatus: 'none' | 'pending' | 'approved' | 'rejected';
   verifiedSchoolName: string | null;
-  login: (nickname?: string) => void;
-  logout: () => void;
-  submitVerification: (schoolName: string) => void;
+  setAuth: (payload: {
+    isLoggedIn: boolean;
+    userId: string | null;
+    email: string | null;
+    nickname: string;
+    hasNickname: boolean;
+    role: 'user' | 'admin';
+    verificationStatus: 'none' | 'pending' | 'approved' | 'rejected';
+    verifiedSchoolName: string | null;
+  }) => void;
+  markReady: () => void;
+  clearAuth: () => void;
   setVerificationStatus: (status: 'none' | 'pending' | 'approved' | 'rejected', schoolName?: string | null) => void;
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
+export const useAuthStore = create<AuthState>()((set) => ({
+  isReady: false,
+  isLoggedIn: false,
+  userId: null,
+  email: null,
+  nickname: '유학생A',
+  hasNickname: false,
+  role: 'user',
+  verificationStatus: 'none',
+  verifiedSchoolName: null,
+  setAuth: (payload) =>
+    set({
+      isReady: true,
+      ...payload
+    }),
+  markReady: () => set({ isReady: true }),
+  clearAuth: () =>
+    set({
+      isReady: true,
       isLoggedIn: false,
       userId: null,
+      email: null,
       nickname: '유학생A',
+      hasNickname: false,
+      role: 'user',
       verificationStatus: 'none',
-      verifiedSchoolName: null,
-      login: (nickname) => {
-        const userId = 'mock-user-1';
-        const matchedVerification = mockUserVerifications.find((item) => item.userId === userId && item.status === 'approved');
-
-        set({
-          isLoggedIn: true,
-          userId,
-          nickname: nickname || '유학생A',
-          verificationStatus: matchedVerification ? 'approved' : 'none',
-          verifiedSchoolName: matchedVerification?.schoolName ?? null
-        });
-      },
-      logout: () =>
-        set({
-          isLoggedIn: false,
-          userId: null,
-          verificationStatus: 'none',
-          verifiedSchoolName: null
-        }),
-      submitVerification: (schoolName) =>
-        set({
-          verificationStatus: 'pending',
-          verifiedSchoolName: schoolName
-        }),
-      setVerificationStatus: (status, schoolName) =>
-        set({
-          verificationStatus: status,
-          verifiedSchoolName: schoolName ?? null
-        })
+      verifiedSchoolName: null
     }),
-    {
-      name: 'yuhu-auth'
-    }
-  )
-);
+  setVerificationStatus: (status, schoolName) =>
+    set({
+      verificationStatus: status,
+      verifiedSchoolName: schoolName ?? null
+    })
+}));
