@@ -2,10 +2,9 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, BookOpenText, MessageSquareText } from 'lucide-react';
+import { BookOpenText, ChevronLeft, MessageSquareText } from 'lucide-react';
 import type { School } from '@/types/school';
 import { SchoolDetailSidebar } from '@/components/school/SchoolDetailSidebar';
-import { useAuthStore } from '@/lib/store/auth';
 
 interface Props {
   school: School;
@@ -14,25 +13,23 @@ interface Props {
 
 export function SchoolDetailView({ school, topAgencies }: Props) {
   const router = useRouter();
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
-  const stickyTopClass = isLoggedIn ? 'top-14 md:top-16' : 'top-[90px] md:top-[96px]';
 
   return (
     <div className="min-h-screen bg-background pb-safe">
-      <div className={`sticky z-30 border-b border-border bg-background/95 backdrop-blur md:hidden ${stickyTopClass}`}>
-        <div className="mx-auto max-w-layout px-4 py-3">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="inline-flex items-center gap-1 text-body2 text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>목록으로</span>
-          </button>
-        </div>
+      {/* 모바일 뒤로가기 바 — 헤더(h-14) 바로 아래에 고정 */}
+      <div className="sticky top-14 z-30 flex items-center justify-between border-b border-border bg-card px-4 py-3 md:hidden">
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="flex items-center gap-1 text-foreground"
+        >
+          <ChevronLeft className="h-5 w-5" />
+          <span className="font-medium">뒤로</span>
+        </button>
       </div>
 
-      <div className="mx-auto max-w-layout lg:grid lg:grid-cols-[40%_60%] lg:gap-8">
+      {/* 콘텐츠 — 모바일에서 뒤로가기 바 높이(~46px)만큼 여백 확보 */}
+      <div className="mx-auto max-w-layout pt-3 md:pt-0 lg:grid lg:grid-cols-[40%_60%] lg:gap-8 lg:pt-4">
         <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           <SchoolDetailSidebar school={school} topAgencies={topAgencies} />
         </div>
@@ -43,7 +40,7 @@ export function SchoolDetailView({ school, topAgencies }: Props) {
             onClick={() => router.back()}
             className="mb-4 hidden items-center gap-1 text-body2 text-muted-foreground hover:text-foreground md:inline-flex"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" />
             <span>목록으로</span>
           </button>
 

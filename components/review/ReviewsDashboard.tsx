@@ -121,7 +121,7 @@ export function ReviewsDashboard({ reviews, topAgencies, reviewStats }: Props) {
                 </div>
 
                 <div className="mt-4 mx-auto w-full min-w-0 max-w-[470px] md:max-lg:mt-0 md:max-lg:max-w-none lg:max-w-[640px] xl:max-w-[560px]">
-                  <div ref={carouselRef} className="w-full max-w-full overflow-x-auto scrollbar-hide snap-x snap-mandatory px-1 py-1">
+                  <div ref={carouselRef} className="w-full max-w-full overflow-x-auto scrollbar-hide snap-x snap-mandatory rounded-[24px] bg-white py-1">
                     <div className="flex">
                       {reviews.map((review) => {
                         const href = canViewContent
@@ -129,7 +129,7 @@ export function ReviewsDashboard({ reviews, topAgencies, reviewStats }: Props) {
                           : (`/signup?next=${encodeURIComponent(`/reviews/${review.id}`)}` as Route);
 
                         return (
-                          <div key={review.id} className="relative w-full min-w-0 shrink-0 snap-center px-1 pb-1.5 sm:pb-2">
+                          <div key={review.id} className="relative w-full min-w-0 shrink-0 snap-start pb-1.5 sm:pb-2">
                             <div className="w-full min-w-0">
                               <Link href={href} className="block h-full">
                                 <div className={!canViewContent ? 'pointer-events-none blur-[6px]' : ''}>
@@ -137,7 +137,7 @@ export function ReviewsDashboard({ reviews, topAgencies, reviewStats }: Props) {
                                     review={review}
                                     compact
                                     commentsInteractive={false}
-                                    className="h-full w-full cursor-pointer rounded-[20px] border-[#E5E7EB] p-3 shadow-[0_10px_24px_rgba(17,24,39,0.04)] sm:rounded-[22px] sm:p-4"
+                                    className="h-full w-full cursor-pointer rounded-[20px] border-[#E5E7EB] bg-white p-3 shadow-none hover:shadow-none sm:rounded-[22px] sm:p-4"
                                   />
                                 </div>
                               </Link>

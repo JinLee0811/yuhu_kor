@@ -45,6 +45,7 @@ export default function ReviewDetailPage() {
     getComments(String(params.id)).then(setComments);
   }, [params?.id]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const totalCommentCount = useMemo(
     () => comments.reduce((sum, comment) => sum + 1 + (comment.replies?.length ?? 0), 0),
     [comments]

@@ -5,7 +5,6 @@ import { ChevronDown, X } from 'lucide-react';
 import { SearchBar } from '@/components/common/SearchBar';
 import { SchoolCard } from '@/components/school/SchoolCard';
 import type { ApiResponse } from '@/lib/api';
-import { useAuthStore } from '@/lib/store/auth';
 import type { School } from '@/types/school';
 
 const typeTabs = [
@@ -28,7 +27,6 @@ type SortValue = (typeof sortOptions)[number]['value'];
 type SchoolTypeFilter = (typeof typeTabs)[number]['key'];
 
 export default function SchoolsPage() {
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const stickyTopClass = 'top-14 md:top-16';
   const [schools, setSchools] = useState<School[]>([]);
   const [statsById, setStatsById] = useState<Record<string, { reviewCount: number; avgScore: number; topAgencyCount: number }>>({});

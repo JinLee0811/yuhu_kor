@@ -190,7 +190,7 @@ export function ReviewCard({ review, compact = false, className, onClickCard, co
   return (
     <div
       className={cn(
-        'rounded-xl border border-border bg-card p-4 transition-[transform,box-shadow,border-color] duration-200 will-change-transform',
+        'overflow-hidden rounded-xl border border-border bg-white p-4 transition-[transform,box-shadow,border-color,background-color] duration-200 will-change-transform',
         'hover:border-[#FFDCCF] hover:shadow-[0_14px_30px_rgba(17,24,39,0.08)]',
         compact && 'min-h-[268px] p-3 sm:min-h-[320px] sm:p-4',
         className

@@ -6,10 +6,8 @@ import { SearchBar } from '@/components/common/SearchBar';
 import { EntityCard } from '@/components/entity/EntityCard';
 import { FilterBottomSheet } from '@/components/entity/FilterBottomSheet';
 import { useEntities } from '@/lib/hooks/useEntities';
-import { useAuthStore } from '@/lib/store/auth';
 
 export default function EntityCategoryPage({ params }: { params: { country: string; category: string } }) {
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const [keyword, setKeyword] = useState('');
   const [specialty, setSpecialty] = useState('전체');
   const [sort, setSort] = useState('display_order');

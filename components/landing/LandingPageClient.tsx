@@ -86,6 +86,7 @@ function NavLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function LandingPageClient({ reviews, embedded = false }: { reviews: Review[]; embedded?: boolean }) {
   const [scrolled, setScrolled] = useState(false);
 

@@ -95,10 +95,8 @@ export function EntityDetailView({ entity, reviews, topSchools }: Props) {
       </div>
 
       <div className="mx-auto max-w-layout lg:grid lg:grid-cols-[40%_60%] lg:gap-8 lg:pt-4">
-        <div className="space-y-4">
-          <div className="lg:sticky lg:top-28">
-            <EntityDetail entity={entity} scoreItems={scoreItems} />
-          </div>
+        <div className="space-y-4 lg:sticky lg:top-28 lg:self-start">
+          <EntityDetail entity={entity} scoreItems={scoreItems} />
           <section className="border-b border-border bg-card p-4 md:p-6 lg:rounded-xl lg:border">
             <div className="mb-3">
               <h3 className="font-semibold text-foreground">이 유학원이 많이 보낸 학교</h3>
