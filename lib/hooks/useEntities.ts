@@ -48,10 +48,10 @@ export function useEntityBySlug(slug?: string) {
     queryKey: ['entity', slug],
     queryFn: async () => {
       if (!slug) return null;
-      const res = await fetch('/api/v1/entities?limit=100');
-      const json: ApiResponse<EntitiesPayload> = await res.json();
-      const found = json.data?.items.find((entity) => entity.slug === slug) ?? null;
-      return found;
+      // 전체 목록 로드 대신 slug로 단건 조회 (/api/v1/entities/[id] 는 id·slug 모두 지원)
+      const res = await fetch(`/api/v1/entities/${encodeURIComponent(slug)}`);
+      const json: ApiResponse<Entity> = await res.json();
+      return json.data ?? null;
     },
     enabled: Boolean(slug)
   });

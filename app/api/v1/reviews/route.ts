@@ -56,6 +56,16 @@ export async function POST(request: NextRequest) {
     if (isPendingNickname(profile.nickname)) {
       return NextResponse.json(fail('NICKNAME_REQUIRED', '후기를 남기려면 먼저 닉네임을 설정해줘요.'), { status: 400 });
     }
+
+    // is_verified_review는 클라이언트 값을 신뢰하지 않고 서버에서 직접 확인
+    const { data: verification } = await supabase
+      .from('user_verifications')
+      .select('status')
+      .eq('user_id', user.id)
+      .eq('status', 'approved')
+      .maybeSingle();
+    const verifiedByServer = Boolean(verification);
+
     const review = await createReviewForUser(user.id, profile.nickname, {
       entity_id,
       review_type,
@@ -64,7 +74,7 @@ export async function POST(request: NextRequest) {
       cons,
       summary,
       meta: (meta ?? {}) as ReviewMeta,
-      is_verified_review: Boolean(is_verified_review)
+      is_verified_review: verifiedByServer
     });
 
     return NextResponse.json(ok(review), { status: 201 });

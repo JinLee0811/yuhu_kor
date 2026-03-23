@@ -2,19 +2,23 @@ import Link from 'next/link';
 import { Globe, GraduationCap, MapPin, BookOpen, CalendarDays } from 'lucide-react';
 import type { School } from '@/types/school';
 
-const typeLabelMap = {
+const typeLabelMap: Record<string, string> = {
   university: '대학교',
   tafe: 'TAFE',
   language: '어학원',
-  college: '전문대'
-} as const;
+  college: '전문대',
+  rto: 'RTO',
+  foundation: '파운데이션',
+};
 
-const typeToneMap = {
+const typeToneMap: Record<string, string> = {
   university: 'bg-blue-50 text-blue-700',
   tafe: 'bg-violet-50 text-violet-700',
   language: 'bg-emerald-50 text-emerald-700',
-  college: 'bg-amber-50 text-amber-700'
-} as const;
+  college: 'bg-amber-50 text-amber-700',
+  rto: 'bg-orange-50 text-orange-700',
+  foundation: 'bg-pink-50 text-pink-700',
+};
 
 interface Props {
   school: School;

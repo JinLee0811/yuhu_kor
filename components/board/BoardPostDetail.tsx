@@ -25,9 +25,11 @@ interface Props {
 export function BoardPostDetail({ post }: Props) {
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const nickname = useAuthStore((state) => state.nickname);
+  const role = useAuthStore((state) => state.role);
   const verificationStatus = useAuthStore((state) => state.verificationStatus);
   const stickyTopClass = isLoggedIn ? 'top-14 md:top-16' : 'top-[90px] md:top-[96px]';
-  const canRead = verificationStatus === 'approved';
+  // 어드민은 인증 없이 전체 열람 가능
+  const canRead = verificationStatus === 'approved' || role === 'admin';
 
   const [likeCount, setLikeCount] = useState(post.likeCount);
   const [comments, setComments] = useState<Comment[]>([]);

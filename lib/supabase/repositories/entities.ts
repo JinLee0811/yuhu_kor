@@ -194,10 +194,14 @@ export async function getEntityByIdOrSlug(idOrSlug: string) {
   }
 
   const supabase = await createClient();
+
+  // UUID 형식이면 id로 조회, 아니면 slug로만 조회 (UUID 타입 에러 방지)
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+
   const { data, error } = await supabase
     .from('entities')
     .select('*')
-    .or(`id.eq.${idOrSlug},slug.eq.${idOrSlug}`)
+    .eq(isUuid ? 'id' : 'slug', idOrSlug)
     .maybeSingle();
 
   if (error) throw error;

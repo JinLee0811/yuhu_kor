@@ -19,7 +19,14 @@ const DOC_TYPE_LABEL: Record<AdminVerification['documentType'], string> = {
   coe: 'COE (Confirmation of Enrolment)',
   tuition_receipt: '수업료 영수증',
   enrollment: '재학증명서',
-  agency: '유학원 대화 내역'
+  agency: '유학원 대화 내역',
+  student_id: '학생증'
+};
+
+const SCHOOL_STATUS_LABEL: Record<string, string> = {
+  prospective: '입학 예정',
+  enrolled: '재학생',
+  graduated: '졸업생'
 };
 
 function StatusBadge({ status }: { status: AdminVerification['status'] }) {
@@ -136,6 +143,15 @@ export default function AdminVerificationDetailPage({ params }: { params: Promis
               <p className="font-semibold text-foreground">{DOC_TYPE_LABEL[item.documentType]}</p>
             </div>
           </div>
+          {item.realName && (
+            <div className="flex items-start gap-3">
+              <User className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              <div>
+                <p className="text-caption text-muted-foreground">실명 (어드민 전용)</p>
+                <p className="font-semibold text-foreground">{item.realName}</p>
+              </div>
+            </div>
+          )}
           <div className="flex items-start gap-3">
             <div className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground">🎓</div>
             <div>
@@ -143,6 +159,24 @@ export default function AdminVerificationDetailPage({ params }: { params: Promis
               <p className="font-semibold text-foreground">{item.schoolName}</p>
             </div>
           </div>
+          {item.department && (
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground">📚</div>
+              <div>
+                <p className="text-caption text-muted-foreground">학과 / 전공</p>
+                <p className="font-semibold text-foreground">{item.department}</p>
+              </div>
+            </div>
+          )}
+          {item.schoolStatus && (
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground">📋</div>
+              <div>
+                <p className="text-caption text-muted-foreground">학생 상태</p>
+                <p className="font-semibold text-foreground">{SCHOOL_STATUS_LABEL[item.schoolStatus] ?? item.schoolStatus}</p>
+              </div>
+            </div>
+          )}
           <div className="flex items-start gap-3">
             <Clock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <div>

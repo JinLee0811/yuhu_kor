@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { isSupabaseConfigured } from '@/lib/supabase/env';
 import { mockUser } from '@/lib/mock/auth';
 import { getLatestVerification } from '@/lib/supabase/repositories/verifications';
-import { buildPendingNickname, isPendingNickname, normalizeNicknameInput, validateNickname } from '@/lib/profile/nickname';
+import { generateRandomNickname, isPendingNickname, normalizeNicknameInput, validateNickname } from '@/lib/profile/nickname';
 
 export interface CurrentAuthState {
   isLoggedIn: boolean;
@@ -16,6 +16,8 @@ export interface CurrentAuthState {
   role: 'user' | 'admin';
   verificationStatus: 'none' | 'pending' | 'approved' | 'rejected';
   verifiedSchoolName: string | null;
+  verifiedDepartment: string | null;
+  verifiedSchoolStatus: 'prospective' | 'enrolled' | 'graduated' | null;
 }
 
 export async function ensureProfile(user: User) {
@@ -32,15 +34,18 @@ export async function ensureProfile(user: User) {
   if (existingError) throw existingError;
   if (existing) return existing;
 
+  // 트리거가 이미 처리했을 수 있으므로 upsert 대신 insert → 없을 때만 삽입
+  const randomNickname = generateRandomNickname();
   const { error: insertError } = await supabase.from('profiles').insert({
     id: user.id,
-    nickname: buildPendingNickname(user.id)
+    nickname: randomNickname
   });
 
   if (insertError) {
+    // 충돌(이미 트리거가 생성함) 시 재조회만 진행
     const { error: retryError } = await supabase.from('profiles').upsert({
       id: user.id,
-      nickname: buildPendingNickname(user.id),
+      nickname: randomNickname,
       updated_at: new Date().toISOString()
     });
     if (retryError) throw retryError;
@@ -61,7 +66,9 @@ export async function getCurrentAuthState(): Promise<CurrentAuthState> {
       hasNickname: false,
       role: 'user',
       verificationStatus: 'none',
-      verifiedSchoolName: null
+      verifiedSchoolName: null,
+      verifiedDepartment: null,
+      verifiedSchoolStatus: null
     };
   }
 
@@ -79,7 +86,9 @@ export async function getCurrentAuthState(): Promise<CurrentAuthState> {
       hasNickname: false,
       role: 'user',
       verificationStatus: 'none',
-      verifiedSchoolName: null
+      verifiedSchoolName: null,
+      verifiedDepartment: null,
+      verifiedSchoolStatus: null
     };
   }
 
@@ -94,7 +103,9 @@ export async function getCurrentAuthState(): Promise<CurrentAuthState> {
     hasNickname: !isPendingNickname(profile.nickname),
     role: profile.role ?? 'user',
     verificationStatus: verification?.status ?? 'none',
-    verifiedSchoolName: verification?.schoolName ?? null
+    verifiedSchoolName: verification?.schoolName ?? null,
+    verifiedDepartment: verification?.department ?? null,
+    verifiedSchoolStatus: verification?.schoolStatus ?? null
   };
 }
 

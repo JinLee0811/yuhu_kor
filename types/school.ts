@@ -1,7 +1,7 @@
 export interface School {
   id: string;
   name: string;
-  type: 'university' | 'tafe' | 'language' | 'college';
+  type: 'university' | 'tafe' | 'language' | 'college' | 'rto' | 'foundation';
   city: string;
   description: string;
   fields: string[];

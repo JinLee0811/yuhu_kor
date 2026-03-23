@@ -10,6 +10,7 @@ import {
   ChevronRight,
   GraduationCap,
   LayoutDashboard,
+  MessageSquare,
   ShieldAlert,
   ShieldCheck
 } from 'lucide-react';
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: '/admin/verifications' as Route, label: '인증 관리', icon: ShieldCheck, badgeKey: 'pendingVerifications' as const },
   { href: '/admin/agencies' as Route, label: '유학원 관리', icon: Building2 },
   { href: '/admin/schools' as Route, label: '학교 관리', icon: GraduationCap },
+  { href: '/admin/board' as Route, label: '게시판 관리', icon: MessageSquare },
   { href: '/admin/reports' as Route, label: '신고 관리', icon: ShieldAlert, badgeKey: 'pendingReports' as const }
 ];
 

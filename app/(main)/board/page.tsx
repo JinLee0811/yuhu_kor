@@ -1,33 +1,69 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Clock3, Lock } from 'lucide-react';
+import Link from 'next/link';
 import type { BoardPost } from '@/types/board';
+import type { ApiResponse } from '@/lib/api';
 import { BoardPostCard } from '@/components/board/BoardPostCard';
 import { BoardPostComposer } from '@/components/board/BoardPostComposer';
-import { getBoardPosts, addBoardPost } from '@/lib/mock/board';
-import { schools } from '@/lib/mock-db';
 import { useAuthStore } from '@/lib/store/auth';
+
+async function fetchBoardPosts(schoolId?: string | null): Promise<BoardPost[]> {
+  const params = schoolId ? `?school_id=${schoolId}` : '';
+  const res = await fetch(`/api/v1/board${params}`);
+  const json: ApiResponse<BoardPost[]> = await res.json();
+  if (!res.ok || !json.data) throw new Error(json.error?.message ?? '게시글을 불러오지 못했어요.');
+  return json.data;
+}
 
 function BoardPageContent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const selectedSchoolId = searchParams.get('school');
-  const selectedSchool = useMemo(() => schools.find((school) => school.id === selectedSchoolId) ?? null, [selectedSchoolId]);
 
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const nickname = useAuthStore((state) => state.nickname);
+  const role = useAuthStore((state) => state.role);
   const verificationStatus = useAuthStore((state) => state.verificationStatus);
   const verifiedSchoolName = useAuthStore((state) => state.verifiedSchoolName);
-  const [posts, setPosts] = useState<BoardPost[]>([]);
+  const verifiedDepartment = useAuthStore((state) => state.verifiedDepartment);
+  const verifiedSchoolStatus = useAuthStore((state) => state.verifiedSchoolStatus);
 
-  useEffect(() => {
-    getBoardPosts(selectedSchoolId).then(setPosts);
-  }, [selectedSchoolId]);
+  const isAdmin = role === 'admin';
+  // 어드민은 인증 없이 모든 기능 사용 가능
+  const canRead = verificationStatus === 'approved' || isAdmin;
 
-  const canRead = verificationStatus === 'approved';
+  const { data: posts = [], isLoading } = useQuery({
+    queryKey: ['board-posts', selectedSchoolId],
+    queryFn: () => fetchBoardPosts(selectedSchoolId)
+  });
+
+  // 게시글 작성 핸들러
+  async function handleSubmit(input: Pick<BoardPost, 'title' | 'content' | 'isAnonymous' | 'schoolVerification' | 'authorNickname' | 'schoolId'>) {
+    const res = await fetch('/api/v1/board', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: input.title,
+        content: input.content,
+        isAnonymous: input.isAnonymous,
+        schoolId: input.schoolId
+      })
+    });
+
+    const json: ApiResponse<BoardPost> = await res.json();
+    if (!res.ok || json.error) {
+      throw new Error(json.error?.message ?? '게시글 작성에 실패했습니다.');
+    }
+
+    // 목록 캐시 무효화 후 상세 페이지 이동
+    await queryClient.invalidateQueries({ queryKey: ['board-posts'] });
+    router.push(`/board/${json.data!.id}`);
+  }
 
   return (
     <div className="min-h-screen bg-background pb-safe">
@@ -36,7 +72,9 @@ function BoardPageContent() {
           <div className="mb-2 inline-flex rounded-full bg-accent/10 px-3 py-1 text-caption font-semibold text-accent">
             자유게시판
           </div>
-          <h1 className="text-xl font-bold text-foreground">{selectedSchool ? `${selectedSchool.name} 얘기도 여기서 나눠요` : '학교생활 게시판'}</h1>
+          <h1 className="text-xl font-bold text-foreground">
+            학교생활 게시판
+          </h1>
           <p className="mt-2 text-body2 text-muted-foreground">
             수업 분위기, 적응 팁, 생활 후기까지 편하게 남겨봐요. 지금은 자유게시판 하나로 먼저 운영해요.
           </p>
@@ -62,7 +100,7 @@ function BoardPageContent() {
               </div>
             </div>
           </section>
-        ) : verificationStatus === 'pending' ? (
+        ) : isAdmin ? null : verificationStatus === 'pending' ? (
           <section className="mb-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-amber-100">
@@ -95,21 +133,31 @@ function BoardPageContent() {
             <BoardPostComposer
               authorNickname={nickname}
               verifiedSchoolName={verifiedSchoolName}
+              verifiedDepartment={verifiedDepartment}
+              verifiedSchoolStatus={verifiedSchoolStatus}
               selectedSchoolId={selectedSchoolId}
-              onSubmit={async (input) => {
-                const created = await addBoardPost(input);
-                setPosts(await getBoardPosts(selectedSchoolId));
-                router.push(`/board/${created.id}`);
-              }}
+              onSubmit={handleSubmit}
             />
           </div>
         ) : null}
 
-        <div className="space-y-3">
-          {posts.map((post) => (
-            <BoardPostCard key={post.id} post={post} canRead={canRead} />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-28 animate-pulse rounded-2xl bg-muted" />
+            ))}
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card p-8 text-center">
+            <p className="text-body2 text-muted-foreground">아직 게시글이 없어요. 첫 글을 남겨봐요!</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {posts.map((post) => (
+              <BoardPostCard key={post.id} post={post} canRead={canRead} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

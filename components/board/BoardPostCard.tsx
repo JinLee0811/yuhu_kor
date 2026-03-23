@@ -42,7 +42,11 @@ export function BoardPostCard({ post, canRead }: Props) {
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-caption text-muted-foreground">
             <span className="font-medium text-foreground">{authorLabel}</span>
             {post.schoolVerification.isVerified && post.schoolVerification.schoolName ? (
-              <SchoolVerificationBadge schoolName={post.schoolVerification.schoolName} />
+              <SchoolVerificationBadge
+                schoolName={post.schoolVerification.schoolName}
+                department={post.schoolVerification.department}
+                schoolStatus={post.schoolVerification.schoolStatus}
+              />
             ) : null}
             <span>·</span>
             <span>{formatDate(post.createdAt)}</span>

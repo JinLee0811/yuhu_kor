@@ -10,7 +10,9 @@ const SCHOOL_TYPE_LABEL: Record<School['type'], string> = {
   university: '대학교',
   tafe: 'TAFE',
   language: '어학원',
-  college: '컬리지'
+  college: '컬리지',
+  rto: 'RTO',
+  foundation: '파운데이션',
 };
 
 const CITIES = ['시드니', '멜버른', '브리즈번', '퍼스', '애들레이드', '골드코스트', '기타'];
@@ -244,7 +246,7 @@ export default function AdminSchoolsPage() {
         <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
           {/* 유형 필터 */}
           <div className="mb-3 flex flex-wrap gap-1">
-            {(['all', 'university', 'tafe', 'language', 'college'] as const).map((t) => (
+            {(['all', 'university', 'tafe', 'language', 'college', 'rto', 'foundation'] as const).map((t) => (
               <button
                 key={t}
                 type="button"

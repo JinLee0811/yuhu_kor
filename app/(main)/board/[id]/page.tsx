@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { getBoardPost } from '@/lib/mock/board';
+import { getBoardPost } from '@/lib/supabase/repositories/board';
 import { BoardPostDetail } from '@/components/board/BoardPostDetail';
 
 interface Params {
@@ -10,9 +10,7 @@ interface Params {
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const post = await getBoardPost(params.id);
   if (!post) {
-    return {
-      title: '게시판 | 유후'
-    };
+    return { title: '게시판 | 유후' };
   }
 
   return {

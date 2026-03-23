@@ -12,6 +12,8 @@ interface AuthState {
   role: 'user' | 'admin';
   verificationStatus: 'none' | 'pending' | 'approved' | 'rejected';
   verifiedSchoolName: string | null;
+  verifiedDepartment: string | null;
+  verifiedSchoolStatus: 'prospective' | 'enrolled' | 'graduated' | null;
   setAuth: (payload: {
     isLoggedIn: boolean;
     userId: string | null;
@@ -21,6 +23,8 @@ interface AuthState {
     role: 'user' | 'admin';
     verificationStatus: 'none' | 'pending' | 'approved' | 'rejected';
     verifiedSchoolName: string | null;
+    verifiedDepartment: string | null;
+    verifiedSchoolStatus: 'prospective' | 'enrolled' | 'graduated' | null;
   }) => void;
   markReady: () => void;
   clearAuth: () => void;
@@ -37,6 +41,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
   role: 'user',
   verificationStatus: 'none',
   verifiedSchoolName: null,
+  verifiedDepartment: null,
+  verifiedSchoolStatus: null,
   setAuth: (payload) =>
     set({
       isReady: true,
@@ -53,7 +59,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
       hasNickname: false,
       role: 'user',
       verificationStatus: 'none',
-      verifiedSchoolName: null
+      verifiedSchoolName: null,
+      verifiedDepartment: null,
+      verifiedSchoolStatus: null
     }),
   setVerificationStatus: (status, schoolName) =>
     set({

@@ -12,7 +12,8 @@ const DOC_TYPE_LABEL: Record<AdminVerification['documentType'], string> = {
   coe: 'COE',
   tuition_receipt: '수업료 영수증',
   enrollment: '재학증명서',
-  agency: '대화 내역'
+  agency: '대화 내역',
+  student_id: '학생증'
 };
 
 const STATUS_TABS = [

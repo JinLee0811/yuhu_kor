@@ -2,16 +2,19 @@
 
 import { useState } from 'react';
 import type { BoardPost } from '@/types/board';
+import type { SchoolStatus } from '@/types/verification';
 import { SchoolVerificationBadge } from '@/components/board/SchoolVerificationBadge';
 
 interface Props {
   authorNickname: string;
   verifiedSchoolName: string;
+  verifiedDepartment?: string | null;
+  verifiedSchoolStatus?: SchoolStatus | null;
   onSubmit: (input: Pick<BoardPost, 'title' | 'content' | 'isAnonymous' | 'schoolVerification' | 'authorNickname' | 'schoolId'>) => Promise<void>;
   selectedSchoolId?: string | null;
 }
 
-export function BoardPostComposer({ authorNickname, verifiedSchoolName, selectedSchoolId, onSubmit }: Props) {
+export function BoardPostComposer({ authorNickname, verifiedSchoolName, verifiedDepartment, verifiedSchoolStatus, selectedSchoolId, onSubmit }: Props) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -20,7 +23,11 @@ export function BoardPostComposer({ authorNickname, verifiedSchoolName, selected
     <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <h2 className="font-semibold text-foreground">글쓰기</h2>
-        <SchoolVerificationBadge schoolName={verifiedSchoolName} />
+        <SchoolVerificationBadge
+          schoolName={verifiedSchoolName}
+          department={verifiedDepartment}
+          schoolStatus={verifiedSchoolStatus}
+        />
       </div>
 
       <div className="space-y-3">
@@ -56,7 +63,9 @@ export function BoardPostComposer({ authorNickname, verifiedSchoolName, selected
                 authorNickname,
                 schoolVerification: {
                   isVerified: true,
-                  schoolName: verifiedSchoolName
+                  schoolName: verifiedSchoolName,
+                  department: verifiedDepartment ?? null,
+                  schoolStatus: verifiedSchoolStatus ?? null
                 },
                 schoolId: selectedSchoolId ?? null
               });

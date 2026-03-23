@@ -16,8 +16,11 @@ export interface AdminVerification {
   userNickname: string;
   userEmail: string;
   status: 'pending' | 'approved' | 'rejected';
-  documentType: 'coe' | 'tuition_receipt' | 'enrollment' | 'agency';
+  documentType: 'coe' | 'tuition_receipt' | 'enrollment' | 'agency' | 'student_id';
   schoolName: string;
+  realName: string | null;
+  department: string | null;
+  schoolStatus: 'prospective' | 'enrolled' | 'graduated' | null;
   documentUrl: string | null;
   submittedAt: string;
   approvedAt: string | null;

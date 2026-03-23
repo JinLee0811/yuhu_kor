@@ -27,6 +27,12 @@ export async function GET(request: NextRequest) {
       items: result.items,
       total: result.total,
       nextPage: result.nextPage
-    })
+    }),
+    {
+      headers: {
+        // 유학원 목록: 1분 신선도, 5분 stale-while-revalidate (Vercel CDN 활용)
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300'
+      }
+    }
   );
 }

@@ -3,10 +3,14 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { agencySchema, entities } from '@/lib/mock-db';
+import { categories } from '@/lib/constants/categories';
+import { useEntities } from '@/lib/hooks/useEntities';
 import { Step1BasicInfo } from '@/components/review/ReviewForm/Step1BasicInfo';
 import { Step2Scores } from '@/components/review/ReviewForm/Step2Scores';
 import { Step3Text } from '@/components/review/ReviewForm/Step3Text';
+
+// 카테고리 상수에서 유학원 리뷰 스키마 가져오기 (mock-db 비의존)
+const agencySchema = categories.find((category) => category.slug === 'agency')?.review_schema ?? [];
 
 export function ReviewForm() {
   const router = useRouter();
@@ -19,6 +23,13 @@ export function ReviewForm() {
   const [pros, setPros] = useState('');
   const [cons, setCons] = useState('');
   const [summary, setSummary] = useState('');
+
+  // 유학원 목록 API 조회 (mock-db 대신 실 API 사용)
+  const { data: entitiesData } = useEntities({ limit: 50 } as Parameters<typeof useEntities>[0], 50);
+  const agencies = useMemo(
+    () => entitiesData?.pages.flatMap((page) => page.items) ?? [],
+    [entitiesData]
+  );
 
   const canStep1 = Boolean(selectedAgencyId && year && purpose && city);
   const canStep2 = agencySchema.every((item) => (scores[item.key] ?? 0) > 0);
@@ -71,7 +82,7 @@ export function ReviewForm() {
 
       {step === 1 ? (
         <Step1BasicInfo
-          agencies={entities.filter((entity) => entity.category_id === 'cat-agency')}
+          agencies={agencies}
           selectedAgencyId={selectedAgencyId}
           year={year}
           purpose={purpose}

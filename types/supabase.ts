@@ -109,13 +109,16 @@ export interface Database {
           programs: string[];
           feature_tags: string[];
           logo_text: string | null;
+          ielts_requirement: Json | null;
+          qs_ranking: Json | null;
+          scholarships: Json;
           created_at: string;
           updated_at: string;
         };
         Insert: Partial<Database['public']['Tables']['schools']['Row']> & {
           slug: string;
           name: string;
-          type: 'university' | 'tafe' | 'language' | 'college';
+          type: 'university' | 'tafe' | 'language' | 'college' | 'rto' | 'foundation';
           city: string;
           description: string;
           address: string;
@@ -154,6 +157,11 @@ export interface Database {
           school_name: string;
           submitted_at: string;
           approved_at: string | null;
+          rejection_reason: string | null;
+          reviewer_id: string | null;
+          reviewed_at: string | null;
+          email_address: string | null;
+          email_verified_at: string | null;
         };
         Insert: Partial<Database['public']['Tables']['user_verifications']['Row']> & {
           user_id: string;

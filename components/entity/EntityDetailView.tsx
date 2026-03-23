@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronLeft, PenSquare, Share2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Heart, PenSquare, Share2, X } from 'lucide-react';
 import type { Route } from 'next';
 import type { Entity } from '@/types/entity';
 import type { Review, ReviewType } from '@/types/review';
@@ -10,6 +10,8 @@ import { EntityDetail } from '@/components/entity/EntityDetail';
 import { ReviewList } from '@/components/review/ReviewList';
 import { useAuthStore } from '@/lib/store/auth';
 import { AuthRequiredPanel } from '@/components/common/AuthRequiredPanel';
+import { useFavoriteToggle } from '@/lib/hooks/useFavorites';
+import { toast } from 'sonner';
 
 interface Props {
   entity: Entity;
@@ -33,6 +35,18 @@ export function EntityDetailView({ entity, reviews, topSchools }: Props) {
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | ReviewType>('all');
   const [isPolicyOpen, setIsPolicyOpen] = useState(false);
+
+  // 즐겨찾기 토글 (로그인한 경우에만 동작)
+  const { isFavorited, isLoading: favLoading, toggle: toggleFavorite } = useFavoriteToggle(entity.id, false);
+
+  const handleFavorite = () => {
+    if (!isLoggedIn) {
+      toast.error('로그인 후 즐겨찾기를 사용할 수 있어요.');
+      return;
+    }
+    toggleFavorite();
+    toast.success(isFavorited ? '관심 유학원에서 제거했어요.' : '관심 유학원에 추가했어요.');
+  };
   const stickyTopClass = canViewContent ? 'top-14 md:top-16' : 'top-[90px] md:top-[96px]';
 
   const scoreItems = [
@@ -89,9 +103,23 @@ export function EntityDetailView({ entity, reviews, topSchools }: Props) {
           <ChevronLeft className="h-5 w-5" />
           <span className="font-medium">뒤로</span>
         </button>
-        <button className="rounded-lg p-2 transition-colors hover:bg-muted">
-          <Share2 className="h-5 w-5 text-muted-foreground" />
-        </button>
+        <div className="flex items-center gap-1">
+          {/* 즐겨찾기 버튼 */}
+          <button
+            type="button"
+            onClick={handleFavorite}
+            disabled={favLoading}
+            className="rounded-lg p-2 transition-colors hover:bg-muted"
+            aria-label={isFavorited ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+          >
+            <Heart
+              className={`h-5 w-5 transition-colors ${isFavorited ? 'fill-red-500 text-red-500' : 'text-muted-foreground'}`}
+            />
+          </button>
+          <button className="rounded-lg p-2 transition-colors hover:bg-muted">
+            <Share2 className="h-5 w-5 text-muted-foreground" />
+          </button>
+        </div>
       </div>
 
       <div className="mx-auto max-w-layout lg:grid lg:grid-cols-[40%_60%] lg:gap-8 lg:pt-4">

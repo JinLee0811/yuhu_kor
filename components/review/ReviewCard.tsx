@@ -5,8 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Review } from '@/types/review';
 import { cn } from '@/lib/utils/cn';
 import { ReviewTypeBadge } from '@/components/review/ReviewTypeBadge';
-import { entities } from '@/lib/mock-db';
+import { ReportModal } from '@/components/review/ReportModal';
 import { useAuthStore } from '@/lib/store/auth';
+import { toast } from 'sonner';
 
 interface Comment {
   id: string;
@@ -99,13 +100,14 @@ function timeAgo(iso: string): string {
 
 interface Props {
   review: Review;
+  entityName?: string;
   compact?: boolean;
   className?: string;
   onClickCard?: () => void;
   commentsInteractive?: boolean;
 }
 
-export function ReviewCard({ review, compact = false, className, onClickCard, commentsInteractive = true }: Props) {
+export function ReviewCard({ review, entityName, compact = false, className, onClickCard, commentsInteractive = true }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [helpful, setHelpful] = useState(false);
   const [helpCount, setHelpCount] = useState(review.helpful_count);
@@ -116,6 +118,7 @@ export function ReviewCard({ review, compact = false, className, onClickCard, co
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [newComment, setNewComment] = useState('');
   const [replyContent, setReplyContent] = useState('');
+  const [reportOpen, setReportOpen] = useState(false);
 
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const nickname = useAuthStore((state) => state.nickname);
@@ -123,7 +126,7 @@ export function ReviewCard({ review, compact = false, className, onClickCard, co
   const shouldShowExpand = !compact && (review.pros.length > 150 || review.cons.length > 150);
   const displayYear = review.meta.used_year ?? review.meta.consulted_year ?? review.meta.enrolled_year ?? 2025;
   const displayPurpose = review.meta.purpose ?? '유학 후기';
-  const agencyName = entities.find((entity) => entity.id === review.entity_id)?.name ?? '유학원 정보';
+  const agencyName = entityName ?? '유학원 정보';
   const isCertified = Boolean(review.is_verified_review || review.is_social_verified);
 
   useEffect(() => {
@@ -318,7 +321,14 @@ export function ReviewCard({ review, compact = false, className, onClickCard, co
 
           <div className="shrink-0">
             <button
-              onClick={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (!isLoggedIn) {
+                  toast.error('로그인 후 신고할 수 있어요.');
+                  return;
+                }
+                setReportOpen(true);
+              }}
               className={cn(
                 'flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground',
                 compact && 'px-1.5 py-1 text-[10px] sm:px-2 sm:py-1.5 sm:text-[11px]'
@@ -329,6 +339,8 @@ export function ReviewCard({ review, compact = false, className, onClickCard, co
             </button>
           </div>
         </div>
+
+        <ReportModal reviewId={review.id} isOpen={reportOpen} onClose={() => setReportOpen(false)} />
 
         {commentsInteractive && commentsOpen ? (
           <div className="mt-2 space-y-3 rounded-lg bg-muted/40 p-3 md:p-4 transition-all duration-200">
