@@ -5,12 +5,40 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import type { Route } from 'next';
 import { ArrowLeft, Flag, Star, ThumbsUp } from 'lucide-react';
-import { getComments, getReview, likeComment, likeReview, addComment } from '@/lib/mock/reviewDetail';
 import type { Comment, ReviewCardData } from '@/types/reviewCard';
 import { cn } from '@/lib/utils/cn';
 import { useAuthStore } from '@/lib/store/auth';
 import { CommentThread } from '@/components/common/CommentThread';
 import { AuthRequiredPanel } from '@/components/common/AuthRequiredPanel';
+
+// ── review API 호출 유틸 ──────────────────────────────────────
+async function fetchReview(id: string): Promise<ReviewCardData | null> {
+  const res = await fetch(`/api/v1/reviews/${id}`);
+  const json = await res.json() as { data: ReviewCardData | null; error: unknown };
+  return json.data ?? null;
+}
+
+async function fetchComments(reviewId: string): Promise<Comment[]> {
+  const res = await fetch(`/api/v1/reviews/${reviewId}/comments`);
+  const json = await res.json() as { data: Comment[] | null; error: unknown };
+  return json.data ?? [];
+}
+
+async function postComment(reviewId: string, body: { content: string; parentId?: string | null; mentionNickname?: string | null }) {
+  await fetch(`/api/v1/reviews/${reviewId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+async function postCommentLike(commentId: string) {
+  await fetch(`/api/v1/reviews/comments/${commentId}/like`, { method: 'POST' });
+}
+
+async function postReviewHelpful(reviewId: string) {
+  await fetch(`/api/v1/reviews/${reviewId}/helpful`, { method: 'POST' });
+}
 
 function timeAgo(iso: string): string {
   const created = new Date(iso).getTime();
@@ -31,19 +59,20 @@ export default function ReviewDetailPage() {
 
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const canViewContent = isLoggedIn || process.env.NODE_ENV !== 'production';
-  const nickname = useAuthStore((state) => state.nickname);
   const stickyTopClass = canViewContent ? 'top-14 md:top-16' : 'top-[90px] md:top-[96px]';
 
   useEffect(() => {
     if (!params?.id) return;
-    getReview(String(params.id)).then((data) => {
+    fetchReview(String(params.id)).then((data) => {
       if (data) {
         setReview(data);
         setLikeCount(data.likeCount);
       }
-    });
-    getComments(String(params.id)).then(setComments);
-  }, [params?.id]);
+    }).catch(() => null);
+    if (isLoggedIn) {
+      fetchComments(String(params.id)).then(setComments).catch(() => setComments([]));
+    }
+  }, [params?.id, isLoggedIn]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const totalCommentCount = useMemo(
@@ -83,37 +112,26 @@ export default function ReviewDetailPage() {
     }
     setLiked(true);
     setLikeCount((prev) => prev + 1);
-    await likeReview(review.id);
+    await postReviewHelpful(review.id);
   };
 
   const handleAddRootComment = async (content: string) => {
     if (!canViewContent || !content.trim()) return;
-    await addComment({
-      reviewId: review.id,
-      parentId: null,
-      content: content.trim(),
-      authorNickname: nickname || '익명'
-    });
-    const next = await getComments(review.id);
+    await postComment(review.id, { content: content.trim(), parentId: null });
+    const next = await fetchComments(review.id);
     setComments(next);
   };
 
   const handleAddReply = async (parentId: string, content: string, mentionNickname?: string | null) => {
     if (!canViewContent || !content.trim()) return;
-    await addComment({
-      reviewId: review.id,
-      parentId,
-      content: content.trim(),
-      authorNickname: nickname || '익명',
-      mentionNickname: mentionNickname ?? null
-    });
-    const next = await getComments(review.id);
+    await postComment(review.id, { content: content.trim(), parentId, mentionNickname });
+    const next = await fetchComments(review.id);
     setComments(next);
   };
 
   const handleLikeCommentClick = async (commentId: string) => {
-    await likeComment(commentId);
-    const next = await getComments(review.id);
+    await postCommentLike(commentId);
+    const next = await fetchComments(review.id);
     setComments(next);
   };
 

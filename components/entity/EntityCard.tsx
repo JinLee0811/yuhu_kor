@@ -6,7 +6,6 @@ import { Star, MapPin, ChevronRight } from 'lucide-react';
 import type { Route } from 'next';
 import type { Entity } from '@/types/entity';
 import { QeacVerifiedBadge } from '@/components/entity/QeacVerifiedBadge';
-import { getAgencyAiSummary } from '@/lib/mock/agencyAiSummary';
 import { useAuthStore } from '@/lib/store/auth';
 
 interface Props {
@@ -18,7 +17,6 @@ interface Props {
 export function EntityCard({ entity, country = 'au', category = 'agency' }: Props) {
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const canViewContent = isLoggedIn || process.env.NODE_ENV !== 'production';
-  const aiSummary = getAgencyAiSummary(entity.id);
   const detailHref = `/${country}/${category}/${entity.slug}` as Route;
   const signupHref = `/signup?next=${encodeURIComponent(detailHref)}` as Route;
   const href = canViewContent ? detailHref : signupHref;
@@ -76,26 +74,6 @@ export function EntityCard({ entity, country = 'au', category = 'agency' }: Prop
               {city}
             </span>
           ))}
-        </div>
-
-        <div className="mb-1 min-h-[72px]">
-          {aiSummary ? (
-            <div className="relative h-full overflow-hidden rounded-xl border border-border/70 bg-background px-3 py-2">
-              <p className="mb-1 text-[11px] font-semibold text-accent">AI 한줄 요약</p>
-              <p
-                className={
-                  canViewContent ? 'line-clamp-2 text-body2 text-muted-foreground' : 'line-clamp-2 blur-[6px] select-none text-body2 text-muted-foreground'
-                }
-              >
-                {aiSummary}
-              </p>
-              {!canViewContent ? (
-                <div className="absolute inset-x-0 bottom-2 flex justify-center">
-                  <span className="rounded-full bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-accent shadow-sm">로그인 후 확인 가능</span>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </div>
 
         <div className="mt-3 inline-flex items-center gap-1 text-caption font-semibold text-accent">

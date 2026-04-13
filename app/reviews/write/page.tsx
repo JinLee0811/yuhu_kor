@@ -13,7 +13,7 @@ import type { ApiResponse } from '@/lib/api';
 import type { Entity } from '@/types/entity';
 import type { ReviewFormData, ReviewMeta, ReviewType } from '@/types/review';
 import { cn } from '@/lib/utils/cn';
-import { findSchoolIdByText } from '@/lib/mock/schoolAggregations';
+import { findSchoolIdByText } from '@/lib/utils/findSchoolId';
 import { useAuthStore } from '@/lib/store/auth';
 
 const reviewTypeCards: Array<{ type: ReviewType; icon: string; label: string; desc: string }> = [

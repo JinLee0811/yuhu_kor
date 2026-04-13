@@ -312,3 +312,151 @@ export async function reportReview(reviewId: string, reporterId: string, reason 
 export function createNicknameForUser() {
   return generateAnonymousNickname();
 }
+
+// ────────────────────────────────────────────────────────────────
+// 리뷰 댓글
+// ────────────────────────────────────────────────────────────────
+
+export interface ReviewComment {
+  id: string;
+  reviewId: string;
+  parentId: string | null;
+  authorNickname: string;
+  mentionNickname: string | null;
+  content: string;
+  likeCount: number;
+  createdAt: string;
+  replies: ReviewComment[];
+}
+
+function mapReviewComment(
+  row: {
+    id: string;
+    review_id: string;
+    parent_id: string | null;
+    mention_nickname: string | null;
+    content: string;
+    like_count: number;
+    created_at: string;
+  },
+  nickname: string
+): ReviewComment {
+  return {
+    id: row.id,
+    reviewId: row.review_id,
+    parentId: row.parent_id,
+    authorNickname: nickname,
+    mentionNickname: row.mention_nickname,
+    content: row.content,
+    likeCount: row.like_count,
+    createdAt: row.created_at,
+    replies: []
+  };
+}
+
+// 댓글 목록 조회 (트리 구조)
+export async function listReviewComments(reviewId: string): Promise<ReviewComment[]> {
+  if (!isSupabaseConfigured()) {
+    // mock 모드: reviewDetail mock 사용
+    const mock = await import('@/lib/mock/reviewDetail');
+    const mockComments = await mock.getComments(reviewId);
+    return mockComments as unknown as ReviewComment[];
+  }
+
+  const supabase = await createClient();
+  const { data: rows, error } = await supabase
+    .from('review_comments')
+    .select('*')
+    .eq('review_id', reviewId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  if (!rows || rows.length === 0) return [];
+
+  // 작성자 닉네임 batch 조회
+  const authorIds = [...new Set(rows.map((r) => r.author_id))];
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, nickname')
+    .in('id', authorIds);
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.nickname]));
+
+  const mapped = rows.map((row) =>
+    mapReviewComment(row, profileMap.get(row.author_id) ?? '탈퇴한 유저')
+  );
+
+  // 트리 조립
+  const rootMap = new Map(mapped.map((c) => [c.id, c]));
+  const roots: ReviewComment[] = [];
+  for (const comment of mapped) {
+    if (!comment.parentId) {
+      roots.push(comment);
+    } else {
+      const parent = rootMap.get(comment.parentId);
+      if (parent) parent.replies.push(comment);
+    }
+  }
+  return roots;
+}
+
+// 댓글 작성 (로그인 필요, 인증 권장 — API에서 체크)
+export async function createReviewComment(input: {
+  reviewId: string;
+  authorId: string;
+  authorNickname: string;
+  parentId?: string | null;
+  mentionNickname?: string | null;
+  content: string;
+}): Promise<ReviewComment> {
+  if (!isSupabaseConfigured()) {
+    const mock = await import('@/lib/mock/reviewDetail');
+    await mock.addComment({
+      reviewId: input.reviewId,
+      parentId: input.parentId ?? null,
+      content: input.content,
+      authorNickname: input.authorNickname,
+      mentionNickname: input.mentionNickname ?? null
+    });
+    const comments = await mock.getComments(input.reviewId);
+    const last = comments[comments.length - 1];
+    return last as unknown as ReviewComment;
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('review_comments')
+    .insert({
+      review_id: input.reviewId,
+      author_id: input.authorId,
+      parent_id: input.parentId ?? null,
+      mention_nickname: input.mentionNickname ?? null,
+      content: input.content.trim()
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return mapReviewComment(data, input.authorNickname);
+}
+
+// 댓글 좋아요 (+1)
+export async function likeReviewCommentDb(commentId: string): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    const mock = await import('@/lib/mock/reviewDetail');
+    await mock.likeComment(commentId);
+    return;
+  }
+
+  const supabase = await createClient();
+  const { data: comment } = await supabase
+    .from('review_comments')
+    .select('like_count')
+    .eq('id', commentId)
+    .maybeSingle();
+  if (comment) {
+    await supabase
+      .from('review_comments')
+      .update({ like_count: comment.like_count + 1 })
+      .eq('id', commentId);
+  }
+}

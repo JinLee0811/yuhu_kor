@@ -193,11 +193,161 @@ export async function likeBoardPostDb(id: string): Promise<void> {
     const mock = await import('@/lib/mock/board');
     return mock.likeBoardPost(id);
   }
-  // TODO: board_post_likes 테이블로 중복 방지 구현 예정
-  // 현재는 단순 +1
   const supabase = await createClient();
   const { data: post } = await supabase.from('board_posts').select('like_count').eq('id', id).maybeSingle();
   if (post) {
     await supabase.from('board_posts').update({ like_count: post.like_count + 1 }).eq('id', id);
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+// 게시판 댓글
+// ────────────────────────────────────────────────────────────────
+
+export interface BoardComment {
+  id: string;
+  postId: string;
+  parentId: string | null;
+  authorNickname: string;
+  mentionNickname: string | null;
+  content: string;
+  likeCount: number;
+  createdAt: string;
+  replies: BoardComment[];
+}
+
+// DB Row → BoardComment 매핑 (replies는 호출 측에서 조립)
+function mapBoardComment(
+  row: {
+    id: string;
+    post_id: string;
+    parent_id: string | null;
+    mention_nickname: string | null;
+    content: string;
+    like_count: number;
+    created_at: string;
+  },
+  nickname: string
+): BoardComment {
+  return {
+    id: row.id,
+    postId: row.post_id,
+    parentId: row.parent_id,
+    authorNickname: nickname,
+    mentionNickname: row.mention_nickname,
+    content: row.content,
+    likeCount: row.like_count,
+    createdAt: row.created_at,
+    replies: []
+  };
+}
+
+// 댓글 목록 조회 (트리 구조로 조립)
+export async function listBoardComments(postId: string): Promise<BoardComment[]> {
+  if (!isSupabaseConfigured()) {
+    const mock = await import('@/lib/mock/board');
+    // mock의 Comment 타입을 BoardComment로 변환
+    const mockComments = await mock.getBoardComments(postId);
+    return mockComments as unknown as BoardComment[];
+  }
+
+  const supabase = await createClient();
+  const { data: rows, error } = await supabase
+    .from('board_comments')
+    .select('*')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  if (!rows || rows.length === 0) return [];
+
+  // 작성자 닉네임 batch 조회
+  const authorIds = [...new Set(rows.map((r) => r.author_id))];
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, nickname')
+    .in('id', authorIds);
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.nickname]));
+
+  // 트리 조립: parent_id 없는 것 → 루트, 있는 것 → replies
+  const mapped = rows.map((row) =>
+    mapBoardComment(row, profileMap.get(row.author_id) ?? '탈퇴한 유저')
+  );
+  const rootMap = new Map(mapped.map((c) => [c.id, c]));
+
+  const roots: BoardComment[] = [];
+  for (const comment of mapped) {
+    if (!comment.parentId) {
+      roots.push(comment);
+    } else {
+      const parent = rootMap.get(comment.parentId);
+      if (parent) parent.replies.push(comment);
+    }
+  }
+  return roots;
+}
+
+// 댓글 작성 (인증된 유저만 — API 라우트에서 체크)
+export async function createBoardComment(input: {
+  postId: string;
+  authorId: string;
+  authorNickname: string;
+  parentId?: string | null;
+  mentionNickname?: string | null;
+  content: string;
+}): Promise<BoardComment> {
+  if (!isSupabaseConfigured()) {
+    const mock = await import('@/lib/mock/board');
+    await mock.addBoardComment({
+      postId: input.postId,
+      parentId: input.parentId ?? null,
+      content: input.content,
+      authorNickname: input.authorNickname,
+      mentionNickname: input.mentionNickname
+    });
+    const comments = await mock.getBoardComments(input.postId);
+    const last = comments[comments.length - 1];
+    return last as unknown as BoardComment;
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('board_comments')
+    .insert({
+      post_id: input.postId,
+      author_id: input.authorId,
+      parent_id: input.parentId ?? null,
+      mention_nickname: input.mentionNickname ?? null,
+      content: input.content.trim()
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+
+  // comment_count 증가
+  await supabase.rpc('increment_board_comment_count', { post_id: input.postId }).maybeSingle();
+
+  return mapBoardComment(data, input.authorNickname);
+}
+
+// 댓글 좋아요 (+1)
+export async function likeBoardCommentDb(commentId: string): Promise<void> {
+  if (!isSupabaseConfigured()) {
+    const mock = await import('@/lib/mock/board');
+    return mock.likeBoardComment(commentId);
+  }
+
+  const supabase = await createClient();
+  const { data: comment } = await supabase
+    .from('board_comments')
+    .select('like_count')
+    .eq('id', commentId)
+    .maybeSingle();
+  if (comment) {
+    await supabase
+      .from('board_comments')
+      .update({ like_count: comment.like_count + 1 })
+      .eq('id', commentId);
   }
 }

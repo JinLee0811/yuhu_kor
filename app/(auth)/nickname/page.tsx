@@ -13,10 +13,11 @@ function NicknameSetupPageContent() {
   const isReady = useAuthStore((state) => state.isReady);
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
   const nickname = useAuthStore((state) => state.nickname);
-  const hasNickname = useAuthStore((state) => state.hasNickname);
   const role = useAuthStore((state) => state.role);
   const verificationStatus = useAuthStore((state) => state.verificationStatus);
   const verifiedSchoolName = useAuthStore((state) => state.verifiedSchoolName);
+  const verifiedDepartment = useAuthStore((state) => state.verifiedDepartment);
+  const verifiedSchoolStatus = useAuthStore((state) => state.verifiedSchoolStatus);
   const email = useAuthStore((state) => state.email);
   const userId = useAuthStore((state) => state.userId);
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -34,12 +35,6 @@ function NicknameSetupPageContent() {
       router.replace(`/login?next=${encodeURIComponent(`/nickname?next=${destination}`)}` as Route);
     }
   }, [destination, isLoggedIn, isReady, router]);
-
-  useEffect(() => {
-    if (isReady && isLoggedIn && hasNickname) {
-      router.replace(destination as Route);
-    }
-  }, [destination, hasNickname, isLoggedIn, isReady, router]);
 
   const checkAvailability = async () => {
     try {
@@ -93,7 +88,9 @@ function NicknameSetupPageContent() {
         hasNickname: true,
         role,
         verificationStatus,
-        verifiedSchoolName
+        verifiedSchoolName,
+        verifiedDepartment: verifiedDepartment ?? null,
+        verifiedSchoolStatus: verifiedSchoolStatus ?? null
       });
       toast.success('닉네임 설정이 완료됐어요.');
       router.push(destination as Route);

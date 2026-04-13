@@ -6,9 +6,35 @@ import { ArrowLeft, Eye, Heart, Lock, MessageSquare } from 'lucide-react';
 import type { BoardPost } from '@/types/board';
 import type { Comment } from '@/types/reviewCard';
 import { useAuthStore } from '@/lib/store/auth';
-import { addBoardComment, getBoardComments, incrementBoardView, likeBoardComment, likeBoardPost } from '@/lib/mock/board';
 import { SchoolVerificationBadge } from '@/components/board/SchoolVerificationBadge';
 import { CommentThread } from '@/components/common/CommentThread';
+
+// ── board API 호출 유틸 ────────────────────────────────────────
+async function fetchBoardComments(postId: string): Promise<Comment[]> {
+  const res = await fetch(`/api/v1/board/${postId}/comments`);
+  const json = await res.json() as { data: Comment[] | null; error: unknown };
+  return json.data ?? [];
+}
+
+async function postBoardComment(postId: string, body: { content: string; parentId?: string | null; mentionNickname?: string | null }) {
+  await fetch(`/api/v1/board/${postId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+async function postBoardLike(postId: string) {
+  await fetch(`/api/v1/board/${postId}/like`, { method: 'POST' });
+}
+
+async function postCommentLike(commentId: string) {
+  await fetch(`/api/v1/board/comments/${commentId}/like`, { method: 'POST' });
+}
+
+async function postBoardView(postId: string) {
+  await fetch(`/api/v1/board/${postId}/view`, { method: 'POST' });
+}
 
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat('ko-KR', {
@@ -24,7 +50,6 @@ interface Props {
 
 export function BoardPostDetail({ post }: Props) {
   const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
-  const nickname = useAuthStore((state) => state.nickname);
   const role = useAuthStore((state) => state.role);
   const verificationStatus = useAuthStore((state) => state.verificationStatus);
   const stickyTopClass = isLoggedIn ? 'top-14 md:top-16' : 'top-[90px] md:top-[96px]';
@@ -35,9 +60,10 @@ export function BoardPostDetail({ post }: Props) {
   const [comments, setComments] = useState<Comment[]>([]);
 
   useEffect(() => {
-    incrementBoardView(post.id);
+    // 조회수 증가 (비동기, 결과 무시)
+    void postBoardView(post.id);
     if (canRead) {
-      getBoardComments(post.id).then(setComments);
+      fetchBoardComments(post.id).then(setComments).catch(() => setComments([]));
     }
   }, [post.id, canRead]);
 
@@ -118,7 +144,7 @@ export function BoardPostDetail({ post }: Props) {
             type="button"
             onClick={async () => {
               setLikeCount((prev) => prev + 1);
-              await likeBoardPost(post.id);
+              await postBoardLike(post.id);
             }}
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-body2 text-muted-foreground transition-colors hover:bg-muted/80"
           >
@@ -133,27 +159,16 @@ export function BoardPostDetail({ post }: Props) {
             isLoggedIn={isLoggedIn}
             subtitle="학교생활 얘기도 편하게 이어서 남겨봐요."
             onAddRootComment={async (content) => {
-              await addBoardComment({
-                postId: post.id,
-                parentId: null,
-                content,
-                authorNickname: nickname || '익명'
-              });
-              setComments(await getBoardComments(post.id));
+              await postBoardComment(post.id, { content, parentId: null });
+              setComments(await fetchBoardComments(post.id));
             }}
             onAddReply={async (parentId, content, mentionNickname) => {
-              await addBoardComment({
-                postId: post.id,
-                parentId,
-                content,
-                authorNickname: nickname || '익명',
-                mentionNickname
-              });
-              setComments(await getBoardComments(post.id));
+              await postBoardComment(post.id, { content, parentId, mentionNickname });
+              setComments(await fetchBoardComments(post.id));
             }}
             onLikeComment={async (commentId) => {
-              await likeBoardComment(commentId);
-              setComments(await getBoardComments(post.id));
+              await postCommentLike(commentId);
+              setComments(await fetchBoardComments(post.id));
             }}
           />
         ) : (

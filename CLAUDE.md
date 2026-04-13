@@ -52,27 +52,37 @@ supabase/
 { data: T | null, error: { code: string, message: string } | null }
 ```
 
-## 현재 상태 (2026-03-20)
-- ✅ 프론트엔드 대부분 구현 완료
-- ✅ Mock 데이터로 전체 UI 동작 중
-- ✅ 유학원 10개 mock 데이터 실제 정보로 업데이트 (`lib/mock/agencies.ts`)
-- ✅ **어드민 페이지 완성** — 대시보드, 인증관리, 유학원관리, 학교관리, 신고관리
-- ⏳ **다음: Supabase 백엔드 연동** (mock → 실제 DB)
-- ⏳ RLS 정책 설계 필요
-- ⏳ Storage 연동 (인증 서류 업로드)
-- ⏳ 랜딩 페이지 + SEO 최적화
+## 현재 상태 (2026-03-23 최종)
+- ✅ 프론트엔드 대부분 구현 완료 (빌드 통과, **44페이지**)
+- ✅ 어드민 페이지 완성 — 대시보드, 인증관리, 유학원관리, 학교관리, 신고관리
+- ✅ **Supabase 백엔드 연동 완료**
+  - Project URL: `https://wbltdukxcwmnqdtvvtzz.supabase.co` (Seoul 리전)
+  - 전체 DB 스키마 + RLS + 트리거 적용
+  - 유학원 10개 / 학교 13개 / 임시 리뷰 16개 DB 삽입 완료
+- ✅ **admin-verifications / admin-reports / admin-stats → Supabase 실연동 완료**
+- ✅ **리뷰 신고 기능 완성** — ReportModal + API + 중복방지
+- ✅ **보안 감사 완료** — 4개 취약점 수정, DB FK 2개 추가
+- ✅ **신규 가입 자동 랜덤 닉네임 트리거** — `202603230001_random_nickname_trigger.sql` 적용
+- ✅ **Google OAuth 연동 완료**
+- ✅ **Kakao OAuth 연동** — 개발 모드(팀원만 로그인 가능), 서비스 오픈 시 심사 필요
+- ✅ **관심 유학원 구현** — favorites 테이블 + RLS + API + Hook + 하트 버튼 + 마이페이지 목록 (`202603230002_favorites.sql` 적용)
+- ✅ **마이페이지 전면 개선** — 닉네임 변경(익명성 주의사항), 인증 섹션, 관심 유학원, 설정/로그아웃
+- ✅ **인증(verification) 확장** — 실명/학과/학생상태/학생증 (`202603230003_verification_extended.sql` 적용)
+  - 게시판 배지: 학교·학과·재학생/입학예정/졸업생 표시
+  - 어드민 인증 상세: 실명·학과·학생상태 표시
+- ✅ **인증 기반 접근 제한** — `/reviews/write`, `/board/**` → 인증 완료 유저만 (middleware)
+- ✅ **schools 타입 확장** — `rto` / `foundation` 추가 (마이그레이션 + 전체 UI 반영)
+- ✅ **Storage 버킷 생성** — `verifications` 버킷 (비공개) + 서류 업로드 API + 파일 첨부 UI
+- ✅ **SEO 메타데이터 정비** — 루트 OG/Twitter 설정 + 주요 페이지별 metadata 추가
+- ⏳ **Kakao OAuth 서비스 심사** (MAU 충분 시 진행)
+- ⏳ **학교생활(board) 페이지 정리** — API 연동, mock → Supabase 전환
 - ⏳ PostHog 이벤트 설계 (리뷰 작성 funnel)
 
 ## 다음 작업 순서
-1. user_verifications 테이블에 컬럼 추가 마이그레이션
-   → `rejection_reason`, `reviewer_id`, `reviewed_at`, `email_address`, `email_verified_at`
-2. Supabase Storage 버킷 생성 (verifications — 비공개)
-3. 인증 서류 파일 업로드 UI + API 구현
-4. mock → 실제 Supabase repository 연동 (admin-verifications, admin-reports, admin-stats)
-5. Supabase Auth (Google/Kakao/Email) 연동 확인
-6. RLS 정책 작성 (reviews, entities, profiles, user_verifications)
-7. 랜딩 페이지 카피 + SEO 메타데이터 최적화
-8. PostHog funnel 이벤트 추가
+1. **학교생활(board) 페이지 Supabase 연동** — board_posts 테이블 + RLS + API
+2. PostHog funnel 이벤트 추가
+3. Rate Limiting (Upstash Redis — MAU 500+ 이후)
+4. **Kakao OAuth 서비스 심사** (준비 시 진행)
 
 ## 어드민 페이지 구조
 `profiles.role = 'admin'` 계정만 접근 가능. 비어드민 → `/mypage` 리다이렉트.
@@ -89,13 +99,13 @@ supabase/
 관련 파일:
 - `types/admin.ts` — AdminStats, AdminVerification, AdminReport
 - `lib/mock/admin-*.ts` — mock 데이터 (인증 6건, 신고 5건, 통계)
-- `lib/supabase/repositories/admin-*.ts` — repository (Supabase 연동 TODO 포함)
+- `lib/supabase/repositories/admin-*.ts` — repository (Supabase 실연동 완료)
 - `app/api/v1/admin/verifications/`, `reports/`, `schools/`, `stats/` — API 라우트
 
 ## 사용자 인증(verification) 정책
 리뷰 작성 전 학교 재학 인증 필요. 어드민이 수동 검토 후 승인/반려.
 
-- **서류 종류:** COE / 수업료 영수증 / 재학증명서 / 유학원 대화내역
+- **서류 종류:** COE / 학생증 / 재학증명서 / 수업료 영수증 / 유학원 대화내역
 - **처리 흐름:** 사용자 제출(pending) → 어드민 서류 열람 → 승인/반려(사유 포함)
 - **개인정보:** 서류 원본은 검토 후 삭제 예정 (Storage 연동 시 구현)
 - **배지:** 인증 완료 사용자 리뷰에 ✅ COE 인증 / 📧 이메일 인증 배지 표시

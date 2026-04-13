@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { EntityDetailView } from '@/components/entity/EntityDetailView';
-import { getEntityByIdOrSlug, listEntities } from '@/lib/supabase/repositories/entities';
+import { getEntityByIdOrSlug } from '@/lib/supabase/repositories/entities';
 import { listEntityReviews } from '@/lib/supabase/repositories/reviews';
 import { getTopSchoolsByAgency } from '@/lib/supabase/repositories/aggregations';
+
+// 동적 렌더링 (Supabase 연동 후 cookies() 필요)
+export const dynamic = 'force-dynamic';
 
 interface Params {
   country: string;
@@ -20,21 +23,19 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
     };
   }
 
+  const description = `실제 유학생이 남긴 ${entity.name} 솔직 후기 ${entity.review_count}개. 상담·등록·사후관리 각 단계별 리뷰를 광고 없이 확인하세요.`;
+
   return {
-    title: `${entity.name} 후기 | 유후`,
-    description: `실제 유학생이 남긴 ${entity.name} 솔직 후기 ${entity.review_count}개. 광고 없는 진짜 후기.`,
+    title: `${entity.name} 후기`,
+    description,
     openGraph: {
       title: `${entity.name} 후기 | 유후`,
-      description: `실제 유학생이 남긴 ${entity.name} 솔직 후기 ${entity.review_count}개. 광고 없는 진짜 후기.`,
-      images: ['/images/og-default.svg']
+      description,
+      url: `https://yuhu.kr/${params.country}/${params.category}/${params.slug}`
     }
   };
 }
 
-export async function generateStaticParams() {
-  const result = await listEntities({ page: 1, limit: 200 });
-  return result.items.map((entity) => ({ country: 'au', category: 'agency', slug: entity.slug }));
-}
 
 export default async function EntityDetailPage({ params }: { params: Params }) {
   const entity = await getEntityByIdOrSlug(params.slug);
