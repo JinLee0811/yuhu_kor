@@ -62,30 +62,53 @@ supabase/
 
 ## 현재 상태 & 다음 작업 우선순위
 
-### 완료 (2026-03-21)
+### 완료 (2026-04-13)
+- ✅ **mock 전면 제거 — Supabase 실연동 완료**
+  - `BoardPostDetail.tsx` — 게시판 댓글/좋아요/조회수 mock → API 호출
+  - `reviews/[id]/page.tsx` — 리뷰 상세 + 댓글 mock → API 호출
+  - `EntityCard.tsx` — AI 요약 mock 완전 제거 (기능 삭제)
+  - `reviews/write/page.tsx` — `findSchoolIdByText` mock → `lib/utils/findSchoolId.ts` 분리
+- ✅ **board 댓글 API 라우트 신규 생성**
+  - `GET/POST /api/v1/board/[id]/comments` — 인증 유저(approved) + 어드민만
+  - `POST /api/v1/board/[id]/like` — 로그인 필요
+  - `POST /api/v1/board/[id]/view` — 공개
+  - `POST /api/v1/board/comments/[commentId]/like` — 로그인 필요
+- ✅ **리뷰 댓글 API 라우트 신규 생성**
+  - `GET/POST /api/v1/reviews/[id]/comments` — 로그인 필요 (쓰기는 인증 필요)
+  - `POST /api/v1/reviews/comments/[commentId]/like`
+- ✅ board repository — `listBoardComments`, `createBoardComment`, `likeBoardCommentDb` 추가
+- ✅ reviews repository — `listReviewComments`, `createReviewComment`, `likeReviewCommentDb` 추가
+- ✅ Supabase 마이그레이션 — `increment_board_comment_count` RPC 추가 (대표님 직접 실행 완료)
+- ✅ GitHub 푸시 완료 (`main` 브랜치)
+
+### 완료 (2026-03-21 ~ 03-23)
 - ✅ Supabase 백엔드 실연동 완료 (어드민 stats/verifications/reports)
-- ✅ 리뷰 신고 기능 완성 (ReportModal + API + 중복방지)
-- ✅ 보안 감사 4건 수정 + DB FK 2개 추가 (빌드 41페이지 통과)
-- ✅ **schools 테이블 type 확장** — rto / foundation 추가
-  - 마이그레이션: `202603210001_schools_type_extension.sql`
-  - `types/school.ts`, `SchoolCard`, `SchoolDetailSidebar`, `schools/page.tsx`, `admin/schools/page.tsx` 전부 반영
-- ✅ **Storage 버킷 생성** — verifications 버킷 (비공개)
-  - 마이그레이션: `202603210002_storage_verifications.sql`
-  - `/api/v1/verifications/upload` API 신규 생성 (5MB, JPG/PNG/PDF)
-  - 인증 페이지 파일 첨부 UI 추가
-- ✅ **랜딩/주요 페이지 SEO 메타데이터** 정비
-  - `app/layout.tsx` — metadataBase, OG, Twitter Card, robots 전체 설정
-  - 홈, 후기 목록, 학교 목록, 학교 상세, 유학원 목록, 유학원 상세 각각 metadata 추가
-  - 빌드 통과 (44페이지)
+- ✅ 리뷰 신고 기능 완성, 보안 감사 4건 수정
+- ✅ schools 타입 확장 (rto/foundation), Storage 버킷, SEO 메타데이터
+- ✅ Google/Kakao OAuth, 닉네임 정책, 관심 유학원, 마이페이지, 인증 확장
+- ✅ 인증 기반 접근 제한 middleware (/board/**, /reviews/write)
+- ✅ 빌드 통과 (44페이지)
 
 ### 다음 작업 (우선순위)
-1. Rate Limiting (Upstash Redis — MAU 500+ 이후 적용 예정)
-2. Kakao OAuth 서비스 심사 (MAU 충분 시 진행)
+1. **Vercel 배포** — 대표님 준비되면 진행 (아래 체크리스트 참고)
+2. Rate Limiting (Upstash Redis — MAU 500+ 이후)
+3. Kakao OAuth 서비스 심사 (MAU 충분 시)
 
 ### ⏳ 나중에 할 것 (유저 생기면)
 - **PostHog funnel 이벤트** — 리뷰 작성 단계별 추적 (시작→유학원선택→타입→평점→제출)
   - 유저 100명 이상, 리뷰 50개 이상 모인 시점에 적용
-  - 이미 `NEXT_PUBLIC_POSTHOG_KEY` 환경변수 슬롯만 준비해두면 됨
+  - 환경변수: `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`
+
+### 🚀 Vercel 배포 체크리스트 (대표님 직접)
+배포 전 Vercel 대시보드 → Settings → Environment Variables에 아래 추가:
+```
+NEXT_PUBLIC_SUPABASE_URL       = https://wbltdukxcwmnqdtvvtzz.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY  = (anon key)
+SUPABASE_SERVICE_ROLE_KEY      = (service role key)
+NEXT_PUBLIC_SITE_URL           = https://yuhu.kr  ← 실제 도메인으로
+```
+- `og-image.png` (1200×630) 디자인 후 `public/` 폴더에 추가 필요
+- GitHub `main` 브랜치 연결 → 자동 배포 설정
 
 ## 핵심 비즈니스 로직
 - 리뷰 타입: consultation / full / aftercare
