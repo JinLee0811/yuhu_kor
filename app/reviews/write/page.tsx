@@ -11,9 +11,9 @@ import { REVIEW_SCHEMAS } from '@/lib/constants/reviewSchema';
 import { submitReview, SubmitReviewError } from '@/lib/api/reviews';
 import type { ApiResponse } from '@/lib/api';
 import type { Entity } from '@/types/entity';
+import type { School } from '@/types/school';
 import type { ConsultationMethod, ReviewFormData, ReviewMeta, ReviewType } from '@/types/review';
 import { cn } from '@/lib/utils/cn';
-import { findSchoolIdByText } from '@/lib/utils/findSchoolId';
 import { useAuthStore } from '@/lib/store/auth';
 
 // 리뷰 타입 — 사후관리 단독은 폐지. 등록+학교 안에서 선택적으로 평가 가능.
@@ -107,12 +107,20 @@ interface DraftPayload {
   consultedYear: string;
   consultPurpose: string;
   registered: boolean | null;
-  schoolConsulted: string;
+  // consultation 학교 (검색·선택 + 자유 입력 fallback)
+  consultSchoolKeyword: string;
+  consultSchoolId: string;
+  consultSchoolText: string;
+  consultCourse: string;
   consultationMethod: ConsultationMethod | '';
   usedYear: string;
   usedPurpose: string;
   usedCity: string;
-  schoolCourse: string;
+  // full 학교 (검색·선택 + 자유 입력 fallback) + 학과/과정
+  fullSchoolKeyword: string;
+  fullSchoolId: string;
+  fullSchoolText: string;
+  fullCourse: string;
   currentStatus: 'enrolled' | 'graduated' | '';
   scores: Record<string, number>;
   nps: number | null;
@@ -137,15 +145,9 @@ interface DraftPayload {
   step: number;
 }
 
-// "University of Sydney - Bachelor of IT" → { school, course } 분리.
-// 자동분리 시 aftercare 메타에 사용. 대시 없으면 전체를 school로.
-function splitSchoolCourse(text: string): { school: string; course: string } {
-  const trimmed = text.trim();
-  const parts = trimmed.split(/\s*[-–—]\s*/);
-  if (parts.length >= 2) {
-    return { school: parts[0].trim(), course: parts.slice(1).join(' - ').trim() };
-  }
-  return { school: trimmed, course: '' };
+// 학교 검색 키워드 정규화 — 대소문자, 공백 무시
+function normalizeForSearch(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, '');
 }
 
 function WriteReviewPageContent() {
@@ -157,6 +159,7 @@ function WriteReviewPageContent() {
 
   const [step, setStep] = useState(1);
   const [agencies, setAgencies] = useState<Entity[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
   const [showAgencyResult, setShowAgencyResult] = useState(false);
   const [agencyKeyword, setAgencyKeyword] = useState('');
   const [selectedAgencyId, setSelectedAgencyId] = useState('');
@@ -166,14 +169,24 @@ function WriteReviewPageContent() {
   const [consultedYear, setConsultedYear] = useState('');
   const [consultPurpose, setConsultPurpose] = useState('');
   const [registered, setRegistered] = useState<boolean | null>(null);
-  const [schoolConsulted, setSchoolConsulted] = useState('');
+  // consultation: 학교 검색·선택 (선택 항목)
+  const [consultSchoolKeyword, setConsultSchoolKeyword] = useState('');
+  const [consultSchoolId, setConsultSchoolId] = useState('');
+  const [consultSchoolText, setConsultSchoolText] = useState(''); // 직접 입력 fallback
+  const [showConsultSchoolResult, setShowConsultSchoolResult] = useState(false);
+  const [consultCourse, setConsultCourse] = useState('');
   const [consultationMethod, setConsultationMethod] = useState<ConsultationMethod | ''>('');
 
   // full 분기 메타 (사후관리 흡수 — currentStatus 추가)
   const [usedYear, setUsedYear] = useState('');
   const [usedPurpose, setUsedPurpose] = useState('');
   const [usedCity, setUsedCity] = useState('');
-  const [schoolCourse, setSchoolCourse] = useState('');
+  // full: 학교 검색·선택 (필수) + 학과/과정 별도 텍스트 (필수)
+  const [fullSchoolKeyword, setFullSchoolKeyword] = useState('');
+  const [fullSchoolId, setFullSchoolId] = useState('');
+  const [fullSchoolText, setFullSchoolText] = useState('');
+  const [showFullSchoolResult, setShowFullSchoolResult] = useState(false);
+  const [fullCourse, setFullCourse] = useState('');
   const [currentStatus, setCurrentStatus] = useState<'enrolled' | 'graduated' | ''>('');
 
   // 평점 / NPS / 텍스트
@@ -208,7 +221,7 @@ function WriteReviewPageContent() {
   const draftLoadedRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // 1) 유학원 목록 로드
+  // 1) 유학원 + 학교 목록 로드
   useEffect(() => {
     const loadEntities = async () => {
       const response = await fetch('/api/v1/entities?limit=100');
@@ -218,7 +231,16 @@ function WriteReviewPageContent() {
       }
     };
 
+    const loadSchools = async () => {
+      const response = await fetch('/api/v1/schools');
+      const json: ApiResponse<{ items: School[] }> = await response.json();
+      if (response.ok && json.data?.items) {
+        setSchools(json.data.items);
+      }
+    };
+
     void loadEntities();
+    void loadSchools();
   }, []);
 
   // 2) URL ?agency=... 자동 선택
@@ -265,12 +287,18 @@ function WriteReviewPageContent() {
       setConsultedYear(draft.consultedYear);
       setConsultPurpose(draft.consultPurpose);
       setRegistered(draft.registered);
-      setSchoolConsulted(draft.schoolConsulted);
+      setConsultSchoolKeyword(draft.consultSchoolKeyword);
+      setConsultSchoolId(draft.consultSchoolId);
+      setConsultSchoolText(draft.consultSchoolText);
+      setConsultCourse(draft.consultCourse);
       setConsultationMethod(draft.consultationMethod);
       setUsedYear(draft.usedYear);
       setUsedPurpose(draft.usedPurpose);
       setUsedCity(draft.usedCity);
-      setSchoolCourse(draft.schoolCourse);
+      setFullSchoolKeyword(draft.fullSchoolKeyword);
+      setFullSchoolId(draft.fullSchoolId);
+      setFullSchoolText(draft.fullSchoolText);
+      setFullCourse(draft.fullCourse);
       setCurrentStatus(draft.currentStatus);
       setScores(draft.scores);
       setNps(draft.nps);
@@ -314,12 +342,18 @@ function WriteReviewPageContent() {
         consultedYear,
         consultPurpose,
         registered,
-        schoolConsulted,
+        consultSchoolKeyword,
+        consultSchoolId,
+        consultSchoolText,
+        consultCourse,
         consultationMethod,
         usedYear,
         usedPurpose,
         usedCity,
-        schoolCourse,
+        fullSchoolKeyword,
+        fullSchoolId,
+        fullSchoolText,
+        fullCourse,
         currentStatus,
         scores,
         nps,
@@ -353,8 +387,12 @@ function WriteReviewPageContent() {
     return () => clearTimeout(timer);
   }, [
     agencyKeyword, selectedAgencyId, reviewType,
-    consultedYear, consultPurpose, registered, schoolConsulted, consultationMethod,
-    usedYear, usedPurpose, usedCity, schoolCourse, currentStatus,
+    consultedYear, consultPurpose, registered,
+    consultSchoolKeyword, consultSchoolId, consultSchoolText, consultCourse,
+    consultationMethod,
+    usedYear, usedPurpose, usedCity,
+    fullSchoolKeyword, fullSchoolId, fullSchoolText, fullCourse,
+    currentStatus,
     scores, nps,
     pros, cons, summary, prosChecks, consChecks,
     extraCostOption, extraCostItems, extraCostOther, extraCostIsPublic, extraCostAmount, extraCostCurrency,
@@ -368,6 +406,18 @@ function WriteReviewPageContent() {
     return agencies.filter((agency) => agency.name.toLowerCase().includes(agencyKeyword.toLowerCase()));
   }, [agencies, agencyKeyword]);
 
+  const filteredConsultSchools = useMemo(() => {
+    if (!consultSchoolKeyword.trim()) return schools;
+    const normalized = normalizeForSearch(consultSchoolKeyword);
+    return schools.filter((s) => normalizeForSearch(s.name).includes(normalized));
+  }, [schools, consultSchoolKeyword]);
+
+  const filteredFullSchools = useMemo(() => {
+    if (!fullSchoolKeyword.trim()) return schools;
+    const normalized = normalizeForSearch(fullSchoolKeyword);
+    return schools.filter((s) => normalizeForSearch(s.name).includes(normalized));
+  }, [schools, fullSchoolKeyword]);
+
   const scoreItems = REVIEW_SCHEMAS[reviewType];
   const aftercareScoreItems = REVIEW_SCHEMAS.aftercare;
 
@@ -378,8 +428,9 @@ function WriteReviewPageContent() {
       return Boolean(consultedYear && consultPurpose && registered !== null && consultationMethod);
     }
 
-    // full 분기 (사후관리 흡수)
-    return Boolean(usedYear && usedPurpose && usedCity && schoolCourse.trim() && currentStatus);
+    // full 분기: 학교(검색 선택 또는 직접 입력) + 학과/과정 + 도시 + 연도 + 목적 + 현재상태 모두 필수
+    const fullSchoolOk = Boolean(fullSchoolId || fullSchoolText.trim());
+    return Boolean(usedYear && usedPurpose && usedCity && fullSchoolOk && fullCourse.trim() && currentStatus);
   }, [
     selectedAgencyId,
     reviewType,
@@ -390,7 +441,9 @@ function WriteReviewPageContent() {
     usedYear,
     usedPurpose,
     usedCity,
-    schoolCourse,
+    fullSchoolId,
+    fullSchoolText,
+    fullCourse,
     currentStatus
   ]);
 
@@ -430,6 +483,15 @@ function WriteReviewPageContent() {
     );
   };
 
+  // 학교 표시명 — school_id 선택됐으면 schools에서 매칭, 아니면 직접입력 텍스트
+  const getSchoolDisplayName = (schoolId: string, fallbackText: string) => {
+    if (schoolId) {
+      const found = schools.find((s) => s.id === schoolId);
+      if (found) return found.name;
+    }
+    return fallbackText.trim();
+  };
+
   // 메인 후기(consultation/full)의 메타 빌드
   const buildBaseMeta = (): ReviewMeta => {
     const extraCost = {
@@ -456,22 +518,33 @@ function WriteReviewPageContent() {
     };
 
     if (reviewType === 'consultation') {
+      const schoolDisplay = getSchoolDisplayName(consultSchoolId, consultSchoolText);
+      const consultedDisplay = schoolDisplay
+        ? consultCourse.trim()
+          ? `${schoolDisplay} - ${consultCourse.trim()}`
+          : schoolDisplay
+        : consultCourse.trim();
+
       return {
         consulted_year: Number(consultedYear),
         purpose: consultPurpose,
         registered: Boolean(registered),
-        school_id: findSchoolIdByText(schoolConsulted),
-        school_consulted: schoolConsulted.trim() || undefined,
+        school_id: consultSchoolId || null,
+        school_consulted: consultedDisplay || undefined,
         ...common
       };
     }
+
+    // full
+    const schoolDisplay = getSchoolDisplayName(fullSchoolId, fullSchoolText);
+    const courseDisplay = `${schoolDisplay} - ${fullCourse.trim()}`;
 
     return {
       used_year: Number(usedYear),
       purpose: usedPurpose,
       destination_city: usedCity,
-      school_id: findSchoolIdByText(schoolCourse),
-      school_course: schoolCourse.trim(),
+      school_id: fullSchoolId || null,
+      school_course: courseDisplay,
       current_status: (currentStatus || undefined) as ReviewMeta['current_status'],
       ...common
     };
@@ -479,13 +552,13 @@ function WriteReviewPageContent() {
 
   // 자동분리 시 aftercare 메타 빌드 (full 메타에서 derive)
   const buildAftercareMeta = (): ReviewMeta => {
-    const { school, course } = splitSchoolCourse(schoolCourse);
+    const schoolDisplay = getSchoolDisplayName(fullSchoolId, fullSchoolText);
     return {
       enrolled_year: Number(usedYear),
       destination_city: usedCity,
-      school_id: findSchoolIdByText(schoolCourse),
-      school: school || schoolCourse.trim(),
-      course,
+      school_id: fullSchoolId || null,
+      school: schoolDisplay,
+      course: fullCourse.trim(),
       current_status: (currentStatus || undefined) as ReviewMeta['current_status'],
       pros_tags: aftercareProsChecks,
       cons_tags: aftercareConsChecks,
@@ -752,11 +825,76 @@ function WriteReviewPageContent() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-body2 font-semibold">어떤 학교/과정을 상담받으셨나요? (선택)</label>
+                  <label className="mb-2 block text-body2 font-semibold">상담받은 학교 (선택)</label>
+                  <p className="mb-2 text-caption text-muted-foreground">
+                    이름 일부 입력 → 목록에서 선택. 없으면 직접 입력해도 OK.
+                  </p>
+                  <div className="relative">
+                    <div className="flex items-center rounded-lg border border-border bg-card px-3">
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                      <input
+                        value={consultSchoolKeyword}
+                        onChange={(event) => {
+                          setConsultSchoolKeyword(event.target.value);
+                          setConsultSchoolId('');
+                          setConsultSchoolText('');
+                          setShowConsultSchoolResult(true);
+                        }}
+                        onFocus={() => setShowConsultSchoolResult(true)}
+                        placeholder="예: UTS, 시드니 대학교"
+                        className="h-11 w-full bg-transparent px-2 text-body2 focus:outline-none"
+                      />
+                    </div>
+                    {showConsultSchoolResult ? (
+                      <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-64 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+                        {filteredConsultSchools.slice(0, 30).map((school) => (
+                          <button
+                            key={school.id}
+                            type="button"
+                            onClick={() => {
+                              setConsultSchoolId(school.id);
+                              setConsultSchoolText('');
+                              setConsultSchoolKeyword(school.name);
+                              setShowConsultSchoolResult(false);
+                            }}
+                            className="block w-full border-b border-border px-3 py-2 text-left last:border-none hover:bg-muted"
+                          >
+                            <p className="font-medium text-foreground">{school.name}</p>
+                            <p className="text-caption text-muted-foreground">{school.city}</p>
+                          </button>
+                        ))}
+                        {consultSchoolKeyword.trim() && filteredConsultSchools.length === 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConsultSchoolId('');
+                              setConsultSchoolText(consultSchoolKeyword.trim());
+                              setShowConsultSchoolResult(false);
+                            }}
+                            className="block w-full bg-accent/5 px-3 py-3 text-left hover:bg-accent/10"
+                          >
+                            <p className="text-body2 text-foreground">
+                              📝 직접 입력: <strong>{consultSchoolKeyword}</strong>
+                            </p>
+                            <p className="text-caption text-muted-foreground">목록에 없는 학교</p>
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  {consultSchoolText ? (
+                    <p className="mt-2 text-caption text-amber-700">
+                      ⓘ 직접 입력 모드 — 추후 어드민이 학교 ID와 매칭합니다
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-body2 font-semibold">학과·과정 (선택)</label>
                   <input
-                    value={schoolConsulted}
-                    onChange={(event) => setSchoolConsulted(event.target.value)}
-                    placeholder="예: UNSW - IT"
+                    value={consultCourse}
+                    onChange={(event) => setConsultCourse(event.target.value)}
+                    placeholder="예: Bachelor of IT, Master of Accounting"
                     className="h-11 w-full rounded-lg border border-border bg-card px-3 text-body2"
                   />
                 </div>
@@ -828,11 +966,76 @@ function WriteReviewPageContent() {
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-body2 font-semibold">어느 학교/과정으로 가셨나요? *</label>
+                  <label className="mb-2 block text-body2 font-semibold">학교 *</label>
+                  <p className="mb-2 text-caption text-muted-foreground">
+                    이름 일부 입력 → 목록에서 선택. 없으면 직접 입력.
+                  </p>
+                  <div className="relative">
+                    <div className="flex items-center rounded-lg border border-border bg-card px-3">
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                      <input
+                        value={fullSchoolKeyword}
+                        onChange={(event) => {
+                          setFullSchoolKeyword(event.target.value);
+                          setFullSchoolId('');
+                          setFullSchoolText('');
+                          setShowFullSchoolResult(true);
+                        }}
+                        onFocus={() => setShowFullSchoolResult(true)}
+                        placeholder="예: UTS, 시드니 대학교, RMIT"
+                        className="h-11 w-full bg-transparent px-2 text-body2 focus:outline-none"
+                      />
+                    </div>
+                    {showFullSchoolResult ? (
+                      <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-64 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+                        {filteredFullSchools.slice(0, 30).map((school) => (
+                          <button
+                            key={school.id}
+                            type="button"
+                            onClick={() => {
+                              setFullSchoolId(school.id);
+                              setFullSchoolText('');
+                              setFullSchoolKeyword(school.name);
+                              setShowFullSchoolResult(false);
+                            }}
+                            className="block w-full border-b border-border px-3 py-2 text-left last:border-none hover:bg-muted"
+                          >
+                            <p className="font-medium text-foreground">{school.name}</p>
+                            <p className="text-caption text-muted-foreground">{school.city}</p>
+                          </button>
+                        ))}
+                        {fullSchoolKeyword.trim() && filteredFullSchools.length === 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFullSchoolId('');
+                              setFullSchoolText(fullSchoolKeyword.trim());
+                              setShowFullSchoolResult(false);
+                            }}
+                            className="block w-full bg-accent/5 px-3 py-3 text-left hover:bg-accent/10"
+                          >
+                            <p className="text-body2 text-foreground">
+                              📝 직접 입력: <strong>{fullSchoolKeyword}</strong>
+                            </p>
+                            <p className="text-caption text-muted-foreground">목록에 없는 학교</p>
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  {fullSchoolText ? (
+                    <p className="mt-2 text-caption text-amber-700">
+                      ⓘ 직접 입력 모드 — 추후 어드민이 학교 ID와 매칭합니다
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-body2 font-semibold">학과·과정 *</label>
                   <input
-                    value={schoolCourse}
-                    onChange={(event) => setSchoolCourse(event.target.value)}
-                    placeholder="예: University of Sydney - Bachelor of IT"
+                    value={fullCourse}
+                    onChange={(event) => setFullCourse(event.target.value)}
+                    placeholder="예: Bachelor of IT, Master of Accounting, Diploma of Business"
                     className="h-11 w-full rounded-lg border border-border bg-card px-3 text-body2"
                   />
                 </div>
