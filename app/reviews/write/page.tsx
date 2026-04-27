@@ -1126,6 +1126,15 @@ function WriteReviewPageContent() {
                     <span className="text-caption text-muted-foreground">가중치 {item.weight}</span>
                   </div>
                   <StarRating value={scores[item.key] ?? 0} onChange={(value) => setScores((prev) => ({ ...prev, [item.key]: value }))} size="lg" />
+                  {item.criteria ? (
+                    <p className="mt-2 text-caption text-muted-foreground">
+                      <span className="font-semibold">⭐ 1점</span> {item.criteria.low}
+                      <span className="mx-1.5 text-border">·</span>
+                      <span className="font-semibold">⭐⭐⭐ 3점</span> {item.criteria.mid}
+                      <span className="mx-1.5 text-border">·</span>
+                      <span className="font-semibold">⭐⭐⭐⭐⭐ 5점</span> {item.criteria.high}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -1209,6 +1218,15 @@ function WriteReviewPageContent() {
                           onChange={(value) => setAftercareScores((prev) => ({ ...prev, [item.key]: value }))}
                           size="lg"
                         />
+                        {item.criteria ? (
+                          <p className="mt-2 text-caption text-muted-foreground">
+                            <span className="font-semibold">⭐ 1점</span> {item.criteria.low}
+                            <span className="mx-1.5 text-border">·</span>
+                            <span className="font-semibold">⭐⭐⭐ 3점</span> {item.criteria.mid}
+                            <span className="mx-1.5 text-border">·</span>
+                            <span className="font-semibold">⭐⭐⭐⭐⭐ 5점</span> {item.criteria.high}
+                          </p>
+                        ) : null}
                       </div>
                     ))}
                   </div>
