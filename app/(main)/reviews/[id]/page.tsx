@@ -165,7 +165,7 @@ export default function ReviewDetailPage() {
             <div className="min-w-0 flex-1 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex rounded-full bg-[#FFF0EB] px-2.5 py-1 text-[11px] font-semibold leading-none text-[#FF6B35]">
-                  {review.reviewType === 'enrollment'
+                  {review.reviewType === 'full'
                     ? '#등록하고 학교까지 갔어요'
                     : review.reviewType === 'aftercare'
                     ? '#학교 다니면서 관리받은 후기예요'

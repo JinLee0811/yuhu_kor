@@ -1,16 +1,34 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { fail, ok } from '@/lib/api';
-import type { ReviewMeta, ReviewType } from '@/types/review';
+import type { ConsultationMethod, ReviewMeta, ReviewType } from '@/types/review';
 import { createClient } from '@/lib/supabase/server';
-import { createNicknameForUser, createReviewForUser, deleteReviewForUser } from '@/lib/supabase/repositories/reviews';
+import {
+  createNicknameForUser,
+  createReviewForUser,
+  deleteReviewForUser,
+  DuplicateReviewError
+} from '@/lib/supabase/repositories/reviews';
 import { ensureProfile } from '@/lib/supabase/repositories/profiles';
 import { isSupabaseConfigured } from '@/lib/supabase/env';
 import { isPendingNickname } from '@/lib/profile/nickname';
 
+const VALID_CONSULTATION_METHODS: ConsultationMethod[] = ['visit', 'video', 'kakao', 'email', 'etc'];
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { entity_id, review_type, scores, pros, cons, summary, meta, is_verified_review } = body as {
+    const {
+      entity_id,
+      review_type,
+      scores,
+      pros,
+      cons,
+      summary,
+      meta,
+      is_verified_review,
+      nps,
+      consultation_method
+    } = body as {
       entity_id?: string;
       review_type?: ReviewType;
       scores?: Record<string, number>;
@@ -19,6 +37,8 @@ export async function POST(request: NextRequest) {
       summary?: string;
       meta?: Record<string, unknown>;
       is_verified_review?: boolean;
+      nps?: number | null;
+      consultation_method?: ConsultationMethod | null;
     };
 
     if (!entity_id || !review_type || !scores || !pros || !cons || !summary) {
@@ -29,18 +49,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(fail('INVALID_REVIEW_TEXT', '후기 입력 조건을 확인해줘요.'), { status: 400 });
     }
 
+    // NPS 검증 (있을 경우 0~10)
+    let validatedNps: number | null = null;
+    if (nps !== undefined && nps !== null) {
+      if (typeof nps !== 'number' || !Number.isInteger(nps) || nps < 0 || nps > 10) {
+        return NextResponse.json(fail('INVALID_NPS', '추천 점수는 0~10 사이여야 해요.'), { status: 400 });
+      }
+      validatedNps = nps;
+    }
+
+    // 상담 형태 검증 (consultation 타입에서만 의미. 다른 타입에선 무시)
+    let validatedMethod: ConsultationMethod | null = null;
+    if (review_type === 'consultation' && consultation_method) {
+      if (!VALID_CONSULTATION_METHODS.includes(consultation_method)) {
+        return NextResponse.json(fail('INVALID_CONSULTATION_METHOD', '상담 형태가 올바르지 않아요.'), { status: 400 });
+      }
+      validatedMethod = consultation_method;
+    }
+
     if (!isSupabaseConfigured()) {
-      const review = await createReviewForUser('mock-user-1', createNicknameForUser(), {
-        entity_id,
-        review_type,
-        scores,
-        pros,
-        cons,
-        summary,
-        meta: (meta ?? {}) as ReviewMeta,
-        is_verified_review: Boolean(is_verified_review)
-      });
-      return NextResponse.json(ok(review), { status: 201 });
+      try {
+        const review = await createReviewForUser('mock-user-1', createNicknameForUser(), {
+          entity_id,
+          review_type,
+          scores,
+          pros,
+          cons,
+          summary,
+          meta: (meta ?? {}) as ReviewMeta,
+          is_verified_review: Boolean(is_verified_review),
+          nps: validatedNps,
+          consultation_method: validatedMethod
+        });
+        return NextResponse.json(ok(review), { status: 201 });
+      } catch (error) {
+        if (error instanceof DuplicateReviewError) {
+          return NextResponse.json(
+            fail('DUPLICATE_REVIEW', '이미 같은 유학원에 같은 종류 후기를 작성했어요.', { existingReviewId: error.existingReviewId }),
+            { status: 409 }
+          );
+        }
+        throw error;
+      }
     }
 
     const supabase = await createClient();
@@ -66,18 +116,29 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
     const verifiedByServer = Boolean(verification);
 
-    const review = await createReviewForUser(user.id, profile.nickname, {
-      entity_id,
-      review_type,
-      scores,
-      pros,
-      cons,
-      summary,
-      meta: (meta ?? {}) as ReviewMeta,
-      is_verified_review: verifiedByServer
-    });
-
-    return NextResponse.json(ok(review), { status: 201 });
+    try {
+      const review = await createReviewForUser(user.id, profile.nickname, {
+        entity_id,
+        review_type,
+        scores,
+        pros,
+        cons,
+        summary,
+        meta: (meta ?? {}) as ReviewMeta,
+        is_verified_review: verifiedByServer,
+        nps: validatedNps,
+        consultation_method: validatedMethod
+      });
+      return NextResponse.json(ok(review), { status: 201 });
+    } catch (error) {
+      if (error instanceof DuplicateReviewError) {
+        return NextResponse.json(
+          fail('DUPLICATE_REVIEW', '이미 같은 유학원에 같은 종류 후기를 작성했어요.', { existingReviewId: error.existingReviewId }),
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
   } catch {
     return NextResponse.json(fail('SERVER_ERROR', '후기 작성 중 오류가 발생했어요.'), { status: 500 });
   }

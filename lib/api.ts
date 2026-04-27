@@ -1,6 +1,7 @@
 export interface ApiError {
   code: string;
   message: string;
+  details?: Record<string, unknown>;
 }
 
 export interface ApiResponse<T> {
@@ -12,6 +13,6 @@ export function ok<T>(data: T): ApiResponse<T> {
   return { data, error: null };
 }
 
-export function fail(code: string, message: string): ApiResponse<null> {
-  return { data: null, error: { code, message } };
+export function fail(code: string, message: string, details?: Record<string, unknown>): ApiResponse<null> {
+  return { data: null, error: { code, message, ...(details ? { details } : {}) } };
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Route } from 'next';
 import { ChevronLeft, Search } from 'lucide-react';
@@ -8,23 +8,31 @@ import { toast } from 'sonner';
 import { StarRating } from '@/components/review/StarRating';
 import { FileUpload } from '@/components/review/FileUpload';
 import { REVIEW_SCHEMAS } from '@/lib/constants/reviewSchema';
-import { submitReview } from '@/lib/api/reviews';
+import { submitReview, SubmitReviewError } from '@/lib/api/reviews';
 import type { ApiResponse } from '@/lib/api';
 import type { Entity } from '@/types/entity';
-import type { ReviewFormData, ReviewMeta, ReviewType } from '@/types/review';
+import type { ConsultationMethod, ReviewFormData, ReviewMeta, ReviewType } from '@/types/review';
 import { cn } from '@/lib/utils/cn';
 import { findSchoolIdByText } from '@/lib/utils/findSchoolId';
 import { useAuthStore } from '@/lib/store/auth';
 
+// 리뷰 타입 — 사후관리 단독은 폐지. 등록+학교 안에서 선택적으로 평가 가능.
 const reviewTypeCards: Array<{ type: ReviewType; icon: string; label: string; desc: string }> = [
   { type: 'consultation', icon: '💬', label: '상담만 받았어요', desc: '상담만 받았거나 등록 안 한 경우' },
-  { type: 'full', icon: '✈️', label: '등록하고 학교까지 갔어요', desc: '실제로 등록하고 학교 간 경우' },
-  { type: 'aftercare', icon: '📞', label: '학교 다니면서 관리받은 후기예요', desc: '학교 다니면서 받은 관리 경험' }
+  { type: 'full', icon: '✈️', label: '등록하고 학교까지 갔어요', desc: '실제로 등록하고 학교 간 경우 — 사후관리도 평가 가능' }
 ];
 
 const purposeOptions = ['어학연수', '대학진학', 'TAFE', 'VET', '조기유학', '워킹홀리데이', '기타'];
 const cityOptions = ['시드니', '멜버른', '브리즈번', '골드코스트', '퍼스', '캔버라', '애들레이드', '기타'];
 const yearOptions = Array.from({ length: 8 }, (_, index) => String(2025 - index));
+
+const consultationMethodOptions: Array<{ value: ConsultationMethod; label: string }> = [
+  { value: 'visit', label: '직접 방문' },
+  { value: 'video', label: '화상 상담' },
+  { value: 'kakao', label: '카톡 상담' },
+  { value: 'email', label: '이메일' },
+  { value: 'etc', label: '기타' }
+];
 
 const PROS_CHECKLIST: Record<ReviewType, string[]> = {
   consultation: [
@@ -87,6 +95,59 @@ const SUMMARY_PLACEHOLDERS = [
   '담당자 바뀌고 나서 관리가 소홀해졌어요'
 ];
 
+// 작성 중 자동 저장 키 — 페이지 이탈 시에도 입력값 보호
+const DRAFT_STORAGE_KEY = 'yuhu_review_draft_v2';
+const DRAFT_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7일
+
+interface DraftPayload {
+  savedAt: number;
+  agencyKeyword: string;
+  selectedAgencyId: string;
+  reviewType: ReviewType;
+  consultedYear: string;
+  consultPurpose: string;
+  registered: boolean | null;
+  schoolConsulted: string;
+  consultationMethod: ConsultationMethod | '';
+  usedYear: string;
+  usedPurpose: string;
+  usedCity: string;
+  schoolCourse: string;
+  currentStatus: 'enrolled' | 'graduated' | '';
+  scores: Record<string, number>;
+  nps: number | null;
+  pros: string;
+  cons: string;
+  summary: string;
+  prosChecks: string[];
+  consChecks: string[];
+  extraCostOption: 'none' | 'yes' | '';
+  extraCostItems: string[];
+  extraCostOther: string;
+  extraCostIsPublic: boolean | null;
+  extraCostAmount: string;
+  extraCostCurrency: 'AUD' | 'KRW';
+  verificationFile: string;
+  evaluateAftercare: boolean;
+  aftercareScores: Record<string, number>;
+  aftercareProsChecks: string[];
+  aftercareConsChecks: string[];
+  aftercareProsText: string;
+  aftercareConsText: string;
+  step: number;
+}
+
+// "University of Sydney - Bachelor of IT" → { school, course } 분리.
+// 자동분리 시 aftercare 메타에 사용. 대시 없으면 전체를 school로.
+function splitSchoolCourse(text: string): { school: string; course: string } {
+  const trimmed = text.trim();
+  const parts = trimmed.split(/\s*[-–—]\s*/);
+  if (parts.length >= 2) {
+    return { school: parts[0].trim(), course: parts.slice(1).join(' - ').trim() };
+  }
+  return { school: trimmed, course: '' };
+}
+
 function WriteReviewPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -101,30 +162,31 @@ function WriteReviewPageContent() {
   const [selectedAgencyId, setSelectedAgencyId] = useState('');
   const [reviewType, setReviewType] = useState<ReviewType>('consultation');
 
+  // consultation 분기 메타
   const [consultedYear, setConsultedYear] = useState('');
   const [consultPurpose, setConsultPurpose] = useState('');
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [schoolConsulted, setSchoolConsulted] = useState('');
+  const [consultationMethod, setConsultationMethod] = useState<ConsultationMethod | ''>('');
 
+  // full 분기 메타 (사후관리 흡수 — currentStatus 추가)
   const [usedYear, setUsedYear] = useState('');
   const [usedPurpose, setUsedPurpose] = useState('');
   const [usedCity, setUsedCity] = useState('');
   const [schoolCourse, setSchoolCourse] = useState('');
-
-  const [enrolledYear, setEnrolledYear] = useState('');
-  const [afterSchool, setAfterSchool] = useState('');
-  const [afterCourse, setAfterCourse] = useState('');
-  const [afterCity, setAfterCity] = useState('');
   const [currentStatus, setCurrentStatus] = useState<'enrolled' | 'graduated' | ''>('');
 
+  // 평점 / NPS / 텍스트
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [nps, setNps] = useState<number | null>(null);
   const [pros, setPros] = useState('');
   const [cons, setCons] = useState('');
   const [summary, setSummary] = useState('');
   const [agreedPolicy, setAgreedPolicy] = useState(false);
-
   const [prosChecks, setProsChecks] = useState<string[]>([]);
   const [consChecks, setConsChecks] = useState<string[]>([]);
+
+  // 추가 비용
   const [extraCostOption, setExtraCostOption] = useState<'none' | 'yes' | ''>('');
   const [extraCostItems, setExtraCostItems] = useState<string[]>([]);
   const [extraCostOther, setExtraCostOther] = useState('');
@@ -132,8 +194,21 @@ function WriteReviewPageContent() {
   const [extraCostAmount, setExtraCostAmount] = useState('');
   const [extraCostCurrency, setExtraCostCurrency] = useState<'AUD' | 'KRW'>('AUD');
 
+  // 인증 파일
   const [verificationFile, setVerificationFile] = useState('');
 
+  // 사후관리 추가 평가 (full 분기 한정)
+  const [evaluateAftercare, setEvaluateAftercare] = useState(false);
+  const [aftercareScores, setAftercareScores] = useState<Record<string, number>>({});
+  const [aftercareProsChecks, setAftercareProsChecks] = useState<string[]>([]);
+  const [aftercareConsChecks, setAftercareConsChecks] = useState<string[]>([]);
+  const [aftercareProsText, setAftercareProsText] = useState('');
+  const [aftercareConsText, setAftercareConsText] = useState('');
+
+  const draftLoadedRef = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // 1) 유학원 목록 로드
   useEffect(() => {
     const loadEntities = async () => {
       const response = await fetch('/api/v1/entities?limit=100');
@@ -146,6 +221,7 @@ function WriteReviewPageContent() {
     void loadEntities();
   }, []);
 
+  // 2) URL ?agency=... 자동 선택
   useEffect(() => {
     const agencyId = searchParams.get('agency');
     if (!agencyId || agencies.length === 0) return;
@@ -157,11 +233,135 @@ function WriteReviewPageContent() {
     setAgencyKeyword(agency.name);
   }, [searchParams, agencies]);
 
+  // 3) 닉네임 미설정 시 닉네임 페이지로
   useEffect(() => {
     if (!isReady || !isLoggedIn || hasNickname) return;
     const next = `/reviews/write${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
     router.replace(`/nickname?next=${encodeURIComponent(next)}` as Route);
   }, [hasNickname, isLoggedIn, isReady, router, searchParams]);
+
+  // 4) localStorage draft 복원 (mount 1회)
+  useEffect(() => {
+    if (typeof window === 'undefined' || draftLoadedRef.current) return;
+    draftLoadedRef.current = true;
+
+    try {
+      const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as DraftPayload;
+      if (Date.now() - draft.savedAt > DRAFT_TTL_MS) {
+        window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+        return;
+      }
+      // eslint-disable-next-line no-alert
+      const restore = window.confirm('작성 중인 후기가 있어요. 이어서 작성할까요?');
+      if (!restore) {
+        window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+        return;
+      }
+      setAgencyKeyword(draft.agencyKeyword);
+      setSelectedAgencyId(draft.selectedAgencyId);
+      setReviewType(draft.reviewType);
+      setConsultedYear(draft.consultedYear);
+      setConsultPurpose(draft.consultPurpose);
+      setRegistered(draft.registered);
+      setSchoolConsulted(draft.schoolConsulted);
+      setConsultationMethod(draft.consultationMethod);
+      setUsedYear(draft.usedYear);
+      setUsedPurpose(draft.usedPurpose);
+      setUsedCity(draft.usedCity);
+      setSchoolCourse(draft.schoolCourse);
+      setCurrentStatus(draft.currentStatus);
+      setScores(draft.scores);
+      setNps(draft.nps);
+      setPros(draft.pros);
+      setCons(draft.cons);
+      setSummary(draft.summary);
+      setProsChecks(draft.prosChecks);
+      setConsChecks(draft.consChecks);
+      setExtraCostOption(draft.extraCostOption);
+      setExtraCostItems(draft.extraCostItems);
+      setExtraCostOther(draft.extraCostOther);
+      setExtraCostIsPublic(draft.extraCostIsPublic);
+      setExtraCostAmount(draft.extraCostAmount);
+      setExtraCostCurrency(draft.extraCostCurrency);
+      setVerificationFile(draft.verificationFile);
+      setEvaluateAftercare(draft.evaluateAftercare);
+      setAftercareScores(draft.aftercareScores);
+      setAftercareProsChecks(draft.aftercareProsChecks);
+      setAftercareConsChecks(draft.aftercareConsChecks);
+      setAftercareProsText(draft.aftercareProsText);
+      setAftercareConsText(draft.aftercareConsText);
+      setStep(draft.step);
+    } catch {
+      // 손상된 draft는 무시
+    }
+  }, []);
+
+  // 5) localStorage 자동 저장 (5초 디바운스)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // 빈 상태로 들어왔을 때는 저장 안 함
+    const hasContent = Boolean(selectedAgencyId || pros.trim() || cons.trim() || summary.trim());
+    if (!hasContent) return;
+
+    const timer = setTimeout(() => {
+      const payload: DraftPayload = {
+        savedAt: Date.now(),
+        agencyKeyword,
+        selectedAgencyId,
+        reviewType,
+        consultedYear,
+        consultPurpose,
+        registered,
+        schoolConsulted,
+        consultationMethod,
+        usedYear,
+        usedPurpose,
+        usedCity,
+        schoolCourse,
+        currentStatus,
+        scores,
+        nps,
+        pros,
+        cons,
+        summary,
+        prosChecks,
+        consChecks,
+        extraCostOption,
+        extraCostItems,
+        extraCostOther,
+        extraCostIsPublic,
+        extraCostAmount,
+        extraCostCurrency,
+        verificationFile,
+        evaluateAftercare,
+        aftercareScores,
+        aftercareProsChecks,
+        aftercareConsChecks,
+        aftercareProsText,
+        aftercareConsText,
+        step
+      };
+      try {
+        window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(payload));
+      } catch {
+        // quota / private mode 등은 무시
+      }
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [
+    agencyKeyword, selectedAgencyId, reviewType,
+    consultedYear, consultPurpose, registered, schoolConsulted, consultationMethod,
+    usedYear, usedPurpose, usedCity, schoolCourse, currentStatus,
+    scores, nps,
+    pros, cons, summary, prosChecks, consChecks,
+    extraCostOption, extraCostItems, extraCostOther, extraCostIsPublic, extraCostAmount, extraCostCurrency,
+    verificationFile,
+    evaluateAftercare, aftercareScores, aftercareProsChecks, aftercareConsChecks, aftercareProsText, aftercareConsText,
+    step
+  ]);
 
   const filteredAgencies = useMemo(() => {
     if (!agencyKeyword.trim()) return agencies;
@@ -169,38 +369,42 @@ function WriteReviewPageContent() {
   }, [agencies, agencyKeyword]);
 
   const scoreItems = REVIEW_SCHEMAS[reviewType];
+  const aftercareScoreItems = REVIEW_SCHEMAS.aftercare;
 
   const canProceedStep1 = useMemo(() => {
     if (!selectedAgencyId) return false;
 
     if (reviewType === 'consultation') {
-      return Boolean(consultedYear && consultPurpose && registered !== null);
+      return Boolean(consultedYear && consultPurpose && registered !== null && consultationMethod);
     }
 
-    if (reviewType === 'full') {
-      return Boolean(usedYear && usedPurpose && usedCity && schoolCourse.trim());
-    }
-
-    return Boolean(enrolledYear && afterSchool.trim() && afterCourse.trim() && afterCity && currentStatus);
+    // full 분기 (사후관리 흡수)
+    return Boolean(usedYear && usedPurpose && usedCity && schoolCourse.trim() && currentStatus);
   }, [
     selectedAgencyId,
     reviewType,
     consultedYear,
     consultPurpose,
     registered,
+    consultationMethod,
     usedYear,
     usedPurpose,
     usedCity,
     schoolCourse,
-    enrolledYear,
-    afterSchool,
-    afterCourse,
-    afterCity,
     currentStatus
   ]);
 
-  const canProceedStep2 = useMemo(() => scoreItems.every((item) => (scores[item.key] ?? 0) > 0), [scoreItems, scores]);
-  const canSubmit = summary.trim().length > 0 && agreedPolicy;
+  const canProceedStep2 = useMemo(() => {
+    const baseScoresOk = scoreItems.every((item) => (scores[item.key] ?? 0) > 0);
+    if (!baseScoresOk) return false;
+    if (nps === null) return false;
+    if (reviewType === 'full' && evaluateAftercare) {
+      return aftercareScoreItems.every((item) => (aftercareScores[item.key] ?? 0) > 0);
+    }
+    return true;
+  }, [scoreItems, scores, nps, reviewType, evaluateAftercare, aftercareScoreItems, aftercareScores]);
+
+  const canSubmit = summary.trim().length > 0 && agreedPolicy && !submitting;
 
   const selectedAgency = agencies.find((agency) => agency.id === selectedAgencyId);
 
@@ -212,26 +416,28 @@ function WriteReviewPageContent() {
   );
 
   const toggleChecklistItem = (
-    type: 'pros' | 'cons',
+    target: 'pros' | 'cons' | 'aftercarePros' | 'aftercareCons',
     option: string
   ) => {
-    if (type === 'pros') {
-      setProsChecks((prev) => {
-        const exists = prev.includes(option);
-        return exists ? prev.filter((item) => item !== option) : [...prev, option];
-      });
-    } else {
-      setConsChecks((prev) => {
-        const exists = prev.includes(option);
-        return exists ? prev.filter((item) => item !== option) : [...prev, option];
-      });
-    }
+    const setterMap = {
+      pros: setProsChecks,
+      cons: setConsChecks,
+      aftercarePros: setAftercareProsChecks,
+      aftercareCons: setAftercareConsChecks
+    };
+    setterMap[target]((prev) =>
+      prev.includes(option) ? prev.filter((item) => item !== option) : [...prev, option]
+    );
   };
 
-  const buildMeta = (): ReviewMeta => {
+  // 메인 후기(consultation/full)의 메타 빌드
+  const buildBaseMeta = (): ReviewMeta => {
     const extraCost = {
       exists: extraCostOption === 'yes',
-      types: extraCostOption === 'yes' ? [...extraCostItems, ...(extraCostOther.trim() ? [extraCostOther.trim()] : [])] : [],
+      types:
+        extraCostOption === 'yes'
+          ? [...extraCostItems, ...(extraCostOther.trim() ? [extraCostOther.trim()] : [])]
+          : [],
       amount:
         extraCostOption === 'yes' && extraCostIsPublic && extraCostAmount.trim()
           ? Number(extraCostAmount.replace(/[^0-9.]/g, ''))
@@ -260,49 +466,109 @@ function WriteReviewPageContent() {
       };
     }
 
-    if (reviewType === 'full') {
-      return {
-        used_year: Number(usedYear),
-        purpose: usedPurpose,
-        destination_city: usedCity,
-        school_id: findSchoolIdByText(schoolCourse),
-        school_course: schoolCourse.trim(),
-        ...common
-      };
-    }
-
     return {
-      enrolled_year: Number(enrolledYear),
-      school_id: findSchoolIdByText(afterSchool),
-      school: afterSchool.trim(),
-      course: afterCourse.trim(),
-      destination_city: afterCity,
-      current_status: currentStatus || undefined,
+      used_year: Number(usedYear),
+      purpose: usedPurpose,
+      destination_city: usedCity,
+      school_id: findSchoolIdByText(schoolCourse),
+      school_course: schoolCourse.trim(),
+      current_status: (currentStatus || undefined) as ReviewMeta['current_status'],
       ...common
+    };
+  };
+
+  // 자동분리 시 aftercare 메타 빌드 (full 메타에서 derive)
+  const buildAftercareMeta = (): ReviewMeta => {
+    const { school, course } = splitSchoolCourse(schoolCourse);
+    return {
+      enrolled_year: Number(usedYear),
+      destination_city: usedCity,
+      school_id: findSchoolIdByText(schoolCourse),
+      school: school || schoolCourse.trim(),
+      course,
+      current_status: (currentStatus || undefined) as ReviewMeta['current_status'],
+      pros_tags: aftercareProsChecks,
+      cons_tags: aftercareConsChecks,
+      pros_text: aftercareProsText.trim() ? aftercareProsText.trim() : null,
+      cons_text: aftercareConsText.trim() ? aftercareConsText.trim() : null
     };
   };
 
   const onSubmit = async () => {
     if (!canSubmit || !selectedAgencyId) return;
-
-    const payload: ReviewFormData = {
-      entity_id: selectedAgencyId,
-      review_type: reviewType,
-      scores,
-      pros,
-      cons,
-      summary,
-      meta: buildMeta(),
-      is_verified_review: Boolean(verificationFile)
-    };
+    setSubmitting(true);
 
     try {
-      const result = await submitReview(payload);
-      if (result.success) {
-        router.push(`/au/agency/${selectedAgency?.slug ?? ''}`);
+      // 1) 메인 후기 저장
+      const mainPayload: ReviewFormData = {
+        entity_id: selectedAgencyId,
+        review_type: reviewType,
+        scores,
+        pros,
+        cons,
+        summary,
+        meta: buildBaseMeta(),
+        is_verified_review: Boolean(verificationFile),
+        nps,
+        consultation_method: reviewType === 'consultation' ? (consultationMethod || null) : null
+      };
+
+      try {
+        await submitReview(mainPayload, { silent: true });
+      } catch (error) {
+        if (error instanceof SubmitReviewError && error.code === 'DUPLICATE_REVIEW') {
+          toast.error(error.message);
+          // 기존 후기로 안내 (라우팅은 추후 — 일단 안내만)
+          return;
+        }
+        throw error;
       }
+
+      // 2) full + 사후관리 평가 → aftercare 후기 자동 분리 저장
+      let aftercareSucceeded = true;
+      if (reviewType === 'full' && evaluateAftercare) {
+        const aftercarePayload: ReviewFormData = {
+          entity_id: selectedAgencyId,
+          review_type: 'aftercare',
+          scores: aftercareScores,
+          pros: aftercareProsText.trim() || pros,
+          cons: aftercareConsText.trim() || cons,
+          summary,
+          meta: buildAftercareMeta(),
+          is_verified_review: Boolean(verificationFile),
+          nps: null, // NPS는 메인 후기에만 (이중 카운트 방지)
+          consultation_method: null
+        };
+        try {
+          await submitReview(aftercarePayload, { silent: true });
+        } catch (error) {
+          aftercareSucceeded = false;
+          if (error instanceof SubmitReviewError && error.code === 'DUPLICATE_REVIEW') {
+            toast.message('사후관리 후기는 이미 작성된 게 있어 추가 저장하지 않았어요.');
+          } else {
+            toast.message('메인 후기는 저장됐어요. 사후관리 후기는 저장 실패 — 마이페이지에서 따로 추가해주세요.');
+          }
+        }
+      }
+
+      if (reviewType === 'full' && evaluateAftercare && aftercareSucceeded) {
+        toast.success('등록·학교 후기와 사후관리 후기 모두 등록됐어요!');
+      } else {
+        toast.success('후기가 등록됐어요!');
+      }
+
+      // 임시 저장 비우기
+      try {
+        window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+
+      router.push(`/au/agency/${selectedAgency?.slug ?? ''}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '후기 등록에 실패했어요.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -378,7 +644,7 @@ function WriteReviewPageContent() {
 
             <div>
               <label className="mb-2 block font-semibold text-foreground">어떤 후기예요? *</label>
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2">
                 {reviewTypeCards.map((item) => (
                   <button
                     key={item.type}
@@ -387,6 +653,15 @@ function WriteReviewPageContent() {
                       setReviewType(item.type);
                       setScores({});
                       setVerificationFile('');
+                      // full 외 분기에선 사후관리 평가 토글도 초기화
+                      if (item.type !== 'full') {
+                        setEvaluateAftercare(false);
+                        setAftercareScores({});
+                        setAftercareProsChecks([]);
+                        setAftercareConsChecks([]);
+                        setAftercareProsText('');
+                        setAftercareConsText('');
+                      }
                     }}
                     className={`rounded-xl border p-4 text-left transition-colors ${
                       reviewType === item.type ? 'border-accent bg-accent/10' : 'border-border bg-card hover:bg-muted/40'
@@ -453,6 +728,26 @@ function WriteReviewPageContent() {
                     >
                       아니오
                     </button>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-body2 font-semibold">상담 형태 *</p>
+                  <div className="flex flex-wrap gap-2">
+                    {consultationMethodOptions.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onClick={() => setConsultationMethod(item.value)}
+                        className={`rounded-lg px-3 py-2 text-body2 transition-colors ${
+                          consultationMethod === item.value
+                            ? 'bg-accent text-accent-foreground'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -542,6 +837,26 @@ function WriteReviewPageContent() {
                   />
                 </div>
 
+                <div>
+                  <p className="mb-2 text-body2 font-semibold">현재 상태 *</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStatus('enrolled')}
+                      className={`rounded-lg px-4 py-2 text-body2 ${currentStatus === 'enrolled' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}
+                    >
+                      재학 중
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentStatus('graduated')}
+                      className={`rounded-lg px-4 py-2 text-body2 ${currentStatus === 'graduated' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}
+                    >
+                      졸업·귀국
+                    </button>
+                  </div>
+                </div>
+
                 <div className="rounded-xl border border-blue-200 bg-[#EEF2FF] p-4">
                   <h3 className="mb-1 font-semibold text-foreground">✅ 입학 인증 (권장)</h3>
                   <p className="mb-3 text-body2 text-muted-foreground">인증하면 ✓ 입학 인증 배지 달리고 검색 상단에 노출돼요.</p>
@@ -561,6 +876,13 @@ function WriteReviewPageContent() {
                       primary
                     />
                     <FileUpload
+                      label="학생증"
+                      fileName={verificationFile}
+                      onSelect={(file) => setVerificationFile(file?.name ?? '')}
+                      onRemove={() => setVerificationFile('')}
+                      primary
+                    />
+                    <FileUpload
                       label="비자 승인 이메일"
                       fileName={verificationFile}
                       onSelect={(file) => setVerificationFile(file?.name ?? '')}
@@ -571,115 +893,6 @@ function WriteReviewPageContent() {
                   <p className="mt-3 text-caption text-muted-foreground">* 개인정보는 가려서 올려주세요</p>
                   <p className="text-caption text-muted-foreground">* 업로드 후 즉시 삭제돼요</p>
                   <p className="text-caption text-muted-foreground">* 인증 안 해도 후기 작성 가능해요</p>
-                </div>
-              </div>
-            ) : null}
-
-            {reviewType === 'aftercare' ? (
-              <div className="space-y-4 rounded-xl border border-border bg-card p-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-body2 font-semibold">입학 연도 *</label>
-                    <select
-                      value={enrolledYear}
-                      onChange={(event) => setEnrolledYear(event.target.value)}
-                      className="h-11 w-full rounded-lg border border-border bg-card px-3 text-body2"
-                    >
-                      <option value="">연도 선택</option>
-                      {yearOptions.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-body2 font-semibold">도시 *</label>
-                    <select
-                      value={afterCity}
-                      onChange={(event) => setAfterCity(event.target.value)}
-                      className="h-11 w-full rounded-lg border border-border bg-card px-3 text-body2"
-                    >
-                      <option value="">도시 선택</option>
-                      {cityOptions.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-body2 font-semibold">학교명 *</label>
-                  <input
-                    value={afterSchool}
-                    onChange={(event) => setAfterSchool(event.target.value)}
-                    placeholder="예: University of Sydney"
-                    className="h-11 w-full rounded-lg border border-border bg-card px-3 text-body2"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-body2 font-semibold">과정명 *</label>
-                  <input
-                    value={afterCourse}
-                    onChange={(event) => setAfterCourse(event.target.value)}
-                    placeholder="예: Bachelor of Information Technology"
-                    className="h-11 w-full rounded-lg border border-border bg-card px-3 text-body2"
-                  />
-                </div>
-
-                <div>
-                  <p className="mb-2 text-body2 font-semibold">현재 상태 *</p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCurrentStatus('enrolled')}
-                      className={`rounded-lg px-4 py-2 text-body2 ${currentStatus === 'enrolled' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}
-                    >
-                      재학 중
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentStatus('graduated')}
-                      className={`rounded-lg px-4 py-2 text-body2 ${currentStatus === 'graduated' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}
-                    >
-                      졸업
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-orange-200 bg-[#FFF4E6] p-4">
-                  <h3 className="mb-1 font-semibold text-foreground">🎓 재학생 인증 (강력 권장)</h3>
-                  <p className="mb-3 text-body2 text-muted-foreground">이 후기는 실제 학교 생활 경험이라 인증 권장해요.</p>
-                  <div className="space-y-2">
-                    <FileUpload
-                      label="학생증"
-                      fileName={verificationFile}
-                      onSelect={(file) => setVerificationFile(file?.name ?? '')}
-                      onRemove={() => setVerificationFile('')}
-                      primary
-                    />
-                    <FileUpload
-                      label="재학증명서"
-                      fileName={verificationFile}
-                      onSelect={(file) => setVerificationFile(file?.name ?? '')}
-                      onRemove={() => setVerificationFile('')}
-                      primary
-                    />
-                    <FileUpload
-                      label="성적표 (일부)"
-                      fileName={verificationFile}
-                      onSelect={(file) => setVerificationFile(file?.name ?? '')}
-                      onRemove={() => setVerificationFile('')}
-                      primary
-                    />
-                  </div>
-                  <p className="mt-3 text-caption text-muted-foreground">* 개인정보는 반드시 가려주세요</p>
-                  <p className="text-caption text-muted-foreground">* 업로드 후 즉시 삭제돼요</p>
-                  <p className="text-caption font-semibold text-orange-700">⚠️ 인증 없으면 후기가 하단에 노출돼요</p>
                 </div>
               </div>
             ) : null}
@@ -713,6 +926,92 @@ function WriteReviewPageContent() {
                 </div>
               ))}
             </div>
+
+            {/* NPS — 추천 의향 (consultation/full 공통) */}
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h2 className="mb-1 text-sm font-semibold text-foreground">🎯 추천 의향</h2>
+              <p className="mb-3 text-caption text-muted-foreground">
+                이 유학원을 친구에게 추천할까요? (0=절대 안 함 / 10=꼭 추천)
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from({ length: 11 }, (_, i) => i).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setNps(value)}
+                    className={cn(
+                      'h-10 w-10 rounded-lg border text-body2 font-semibold transition-colors',
+                      nps === value
+                        ? 'border-accent bg-accent text-accent-foreground'
+                        : 'border-border bg-background text-foreground hover:bg-muted/60'
+                    )}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+              {nps !== null ? (
+                <p className="mt-2 text-caption text-muted-foreground">
+                  {nps >= 9 ? '진짜 추천 (적극 옹호)' : nps >= 7 ? '추천 가능' : '추천 어려움'}
+                </p>
+              ) : null}
+            </div>
+
+            {/* 사후관리 평가 토글 (full 분기 한정) */}
+            {reviewType === 'full' ? (
+              <div className="space-y-4 rounded-xl border border-orange-200 bg-[#FFF4E6] p-4">
+                <div>
+                  <h2 className="mb-1 text-sm font-semibold text-foreground">📞 사후관리 경험도 평가할까요? (선택)</h2>
+                  <p className="text-caption text-muted-foreground">
+                    학교 다니면서 받은 관리 경험이 있다면 추가로 평가해줘요. 받은 만큼만 평가하면 돼요.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEvaluateAftercare(true)}
+                    className={`rounded-lg px-4 py-2 text-body2 ${
+                      evaluateAftercare ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    예, 평가할게요
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEvaluateAftercare(false);
+                      setAftercareScores({});
+                    }}
+                    className={`rounded-lg px-4 py-2 text-body2 ${
+                      !evaluateAftercare ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    스킵할게요
+                  </button>
+                </div>
+
+                {evaluateAftercare ? (
+                  <div className="space-y-2 rounded-xl border border-border bg-card">
+                    <div className="border-b border-border p-3">
+                      <p className="text-caption text-muted-foreground">사후관리 평점 (1=별로 / 5=최고)</p>
+                    </div>
+                    {aftercareScoreItems.map((item) => (
+                      <div key={item.key} className="border-b border-border p-4 last:border-none">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="font-medium text-foreground">{item.label}</p>
+                          <span className="text-caption text-muted-foreground">가중치 {item.weight}</span>
+                        </div>
+                        <StarRating
+                          value={aftercareScores[item.key] ?? 0}
+                          onChange={(value) => setAftercareScores((prev) => ({ ...prev, [item.key]: value }))}
+                          size="lg"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="flex gap-3">
               <button type="button" onClick={() => setStep(1)} className="flex-1 rounded-lg bg-secondary px-6 py-4 font-semibold text-secondary-foreground">
@@ -972,6 +1271,86 @@ function WriteReviewPageContent() {
               </div>
             </section>
 
+            {/* 사후관리 텍스트 (full + 토글 ON) */}
+            {reviewType === 'full' && evaluateAftercare ? (
+              <section className="space-y-4 rounded-xl border-2 border-orange-200 bg-[#FFF4E6] p-4 md:p-5">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">📞 사후관리 후기</h2>
+                  <p className="mt-1 text-caption text-muted-foreground">
+                    등록 후 학교 다니면서 받은 관리 경험에 대한 별도 후기
+                  </p>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-foreground">✅ 사후관리에서 좋았던 점</p>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {PROS_CHECKLIST.aftercare.map((option) => {
+                      const checked = aftercareProsChecks.includes(option);
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => toggleChecklistItem('aftercarePros', option)}
+                          className={cn(
+                            'flex min-h-[44px] items-center rounded-lg border px-3 py-2 text-left text-body2 transition-colors',
+                            checked
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-border bg-background text-foreground hover:bg-muted/60'
+                          )}
+                        >
+                          <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-[11px]">
+                            {checked ? '✓' : ''}
+                          </span>
+                          <span>{option}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <textarea
+                    value={aftercareProsText}
+                    onChange={(event) => setAftercareProsText(event.target.value)}
+                    maxLength={500}
+                    className="mt-2 h-24 w-full resize-none rounded-lg border border-border bg-background p-3 text-body2 outline-none focus:border-ring"
+                    placeholder="예) 비자 만료 한 달 전에 미리 연락와서 갱신 도와줬어요"
+                  />
+                </div>
+
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-foreground">😅 사후관리에서 아쉬웠던 점</p>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {CONS_CHECKLIST.aftercare.map((option) => {
+                      const checked = aftercareConsChecks.includes(option);
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => toggleChecklistItem('aftercareCons', option)}
+                          className={cn(
+                            'flex min-h-[44px] items-center rounded-lg border px-3 py-2 text-left text-body2 transition-colors',
+                            checked
+                              ? 'border-accent bg-accent/10 text-accent'
+                              : 'border-border bg-background text-foreground hover:bg-muted/60'
+                          )}
+                        >
+                          <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded border border-border bg-card text-[11px]">
+                            {checked ? '✓' : ''}
+                          </span>
+                          <span>{option}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <textarea
+                    value={aftercareConsText}
+                    onChange={(event) => setAftercareConsText(event.target.value)}
+                    maxLength={500}
+                    className="mt-2 h-24 w-full resize-none rounded-lg border border-border bg-background p-3 text-body2 outline-none focus:border-ring"
+                    placeholder="예) 등록하고 나서는 연락이 거의 끊겼어요"
+                  />
+                </div>
+              </section>
+            ) : null}
+
             {/* 한줄 요약 */}
             <section className="space-y-3 rounded-xl border border-border bg-card p-4 md:p-5">
               <div>
@@ -1004,7 +1383,7 @@ function WriteReviewPageContent() {
                 disabled={!canSubmit}
                 className="flex-1 rounded-lg bg-accent px-6 py-4 font-semibold text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
               >
-                제출하기
+                {submitting ? '저장 중...' : '제출하기'}
               </button>
             </div>
           </div>

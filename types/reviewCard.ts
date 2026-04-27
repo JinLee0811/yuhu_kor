@@ -1,6 +1,7 @@
 import type { ReviewType } from './review';
 
-export type ReviewCardType = 'consultation' | 'enrollment' | 'aftercare';
+// ReviewCardType is identical to ReviewType — unified naming, no more 'enrollment' alias.
+export type ReviewCardType = ReviewType;
 
 export interface ReviewCardData {
   id: string;

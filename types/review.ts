@@ -1,5 +1,7 @@
 export type ReviewType = 'consultation' | 'full' | 'aftercare';
 
+export type ConsultationMethod = 'visit' | 'video' | 'kakao' | 'email' | 'etc';
+
 export interface ReviewMeta {
   used_year?: number;
   consulted_year?: number;
@@ -44,6 +46,8 @@ export interface Review {
   is_social_verified?: boolean;
   status?: 'published' | 'hidden';
   meta: ReviewMeta;
+  nps?: number | null;
+  consultation_method?: ConsultationMethod | null;
   created_at: string;
   updated_at: string;
 }
@@ -57,4 +61,6 @@ export interface ReviewFormData {
   summary: string;
   meta: ReviewMeta;
   is_verified_review: boolean;
+  nps?: number | null;
+  consultation_method?: ConsultationMethod | null;
 }

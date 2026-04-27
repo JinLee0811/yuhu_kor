@@ -34,6 +34,8 @@ function mapReviewRow(row: {
   is_social_verified: boolean;
   status: 'published' | 'hidden';
   meta: unknown;
+  nps?: number | null;
+  consultation_method?: Review['consultation_method'];
   created_at: string;
   updated_at: string;
 }): Review {
@@ -55,14 +57,33 @@ function mapReviewRow(row: {
     is_social_verified: row.is_social_verified,
     status: row.status,
     meta: (row.meta as ReviewMeta) ?? {},
+    nps: row.nps ?? null,
+    consultation_method: row.consultation_method ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at
   };
 }
 
-function mapReviewType(type: Review['review_type']): ReviewCardData['reviewType'] {
-  if (type === 'full') return 'enrollment';
-  return type;
+// 한 사용자가 같은 유학원에 같은 후기 타입을 이미 작성했는지 확인.
+// 다른 유학원, 다른 review_type은 자유롭게 허용.
+export async function findExistingReview(userId: string, entityId: string, reviewType: Review['review_type']) {
+  if (!isSupabaseConfigured()) {
+    return mockReviews.find(
+      (r) => r.user_id === userId && r.entity_id === entityId && r.review_type === reviewType && !r.is_hidden
+    ) ?? null;
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('entity_id', entityId)
+    .eq('review_type', reviewType)
+    .eq('is_hidden', false)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapReviewRow(data) : null;
 }
 
 export async function listEntityReviews(entityId: string, type?: string, sort: 'latest' | 'helpful' = 'latest') {
@@ -128,7 +149,20 @@ export async function listMyReviews(userId: string) {
   };
 }
 
+export class DuplicateReviewError extends Error {
+  constructor(public existingReviewId: string) {
+    super('이미 같은 유학원에 같은 종류의 후기를 작성했어요.');
+    this.name = 'DuplicateReviewError';
+  }
+}
+
 export async function createReviewForUser(userId: string, nickname: string, data: ReviewFormData) {
+  // 중복 작성 차단 (같은 user + 같은 entity + 같은 review_type만 차단)
+  const existing = await findExistingReview(userId, data.entity_id, data.review_type);
+  if (existing) {
+    throw new DuplicateReviewError(existing.id);
+  }
+
   const now = new Date().toISOString();
   const row: Review = {
     id: `r${Date.now()}`,
@@ -142,6 +176,8 @@ export async function createReviewForUser(userId: string, nickname: string, data
     cons: data.cons,
     summary: data.summary,
     meta: data.meta,
+    nps: data.nps ?? null,
+    consultation_method: data.consultation_method ?? null,
     helpful_count: 0,
     is_anonymous: true,
     is_hidden: false,
@@ -171,6 +207,8 @@ export async function createReviewForUser(userId: string, nickname: string, data
       cons: row.cons,
       summary: row.summary,
       meta: row.meta,
+      nps: row.nps,
+      consultation_method: row.consultation_method,
       helpful_count: row.helpful_count,
       is_anonymous: row.is_anonymous,
       is_hidden: row.is_hidden,
@@ -181,7 +219,14 @@ export async function createReviewForUser(userId: string, nickname: string, data
     .select('*')
     .single();
 
-  if (error) throw error;
+  if (error) {
+    // Supabase unique violation 코드 23505 — race condition 대비
+    if ((error as { code?: string }).code === '23505') {
+      const stillExisting = await findExistingReview(userId, data.entity_id, data.review_type);
+      if (stillExisting) throw new DuplicateReviewError(stillExisting.id);
+    }
+    throw error;
+  }
   return mapReviewRow(inserted);
 }
 
@@ -253,7 +298,7 @@ export async function getReviewCardDetail(reviewId: string): Promise<ReviewCardD
 
   return {
     id: review.id,
-    reviewType: mapReviewType(review.review_type),
+    reviewType: review.review_type,
     isVerified: Boolean(review.is_social_verified),
     isDirectlyConfirmed: Boolean(review.is_verified_review),
     authorNickname: review.nickname,
