@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { Route } from 'next';
-import { ChevronLeft, Search } from 'lucide-react';
+import { Check, ChevronLeft, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { StarRating } from '@/components/review/StarRating';
 import { FileUpload } from '@/components/review/FileUpload';
@@ -148,6 +148,27 @@ interface DraftPayload {
 // 학교 검색 키워드 정규화 — 대소문자, 공백 무시
 function normalizeForSearch(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '');
+}
+
+// 학교 타입 라벨 (검색 결과 배지용)
+const SCHOOL_TYPE_LABEL: Record<School['type'], string> = {
+  university: '대학교',
+  tafe: 'TAFE',
+  language: '어학원',
+  college: '칼리지',
+  rto: 'RTO',
+  foundation: '파운데이션'
+};
+
+// NPS 색상 그룹 — 0~6 비추(적), 7~8 보통(황), 9~10 적극추천(녹)
+function npsColorTokens(value: number): {
+  bgUnselected: string;
+  textUnselected: string;
+  bgSelected: string;
+} {
+  if (value <= 6) return { bgUnselected: 'bg-red-50', textUnselected: 'text-red-600', bgSelected: 'bg-red-500' };
+  if (value <= 8) return { bgUnselected: 'bg-amber-50', textUnselected: 'text-amber-700', bgSelected: 'bg-amber-500' };
+  return { bgUnselected: 'bg-emerald-50', textUnselected: 'text-emerald-700', bgSelected: 'bg-emerald-500' };
 }
 
 function WriteReviewPageContent() {
@@ -718,33 +739,43 @@ function WriteReviewPageContent() {
             <div>
               <label className="mb-2 block font-semibold text-foreground">어떤 후기예요? *</label>
               <div className="grid gap-3 md:grid-cols-2">
-                {reviewTypeCards.map((item) => (
-                  <button
-                    key={item.type}
-                    type="button"
-                    onClick={() => {
-                      setReviewType(item.type);
-                      setScores({});
-                      setVerificationFile('');
-                      // full 외 분기에선 사후관리 평가 토글도 초기화
-                      if (item.type !== 'full') {
-                        setEvaluateAftercare(false);
-                        setAftercareScores({});
-                        setAftercareProsChecks([]);
-                        setAftercareConsChecks([]);
-                        setAftercareProsText('');
-                        setAftercareConsText('');
-                      }
-                    }}
-                    className={`rounded-xl border p-4 text-left transition-colors ${
-                      reviewType === item.type ? 'border-accent bg-accent/10' : 'border-border bg-card hover:bg-muted/40'
-                    }`}
-                  >
-                    <p className="mb-1 text-[18px]">{item.icon}</p>
-                    <p className="font-semibold text-foreground">{item.label}</p>
-                    <p className="mt-1 text-caption text-muted-foreground">{item.desc}</p>
-                  </button>
-                ))}
+                {reviewTypeCards.map((item) => {
+                  const selected = reviewType === item.type;
+                  return (
+                    <button
+                      key={item.type}
+                      type="button"
+                      onClick={() => {
+                        setReviewType(item.type);
+                        setScores({});
+                        setVerificationFile('');
+                        if (item.type !== 'full') {
+                          setEvaluateAftercare(false);
+                          setAftercareScores({});
+                          setAftercareProsChecks([]);
+                          setAftercareConsChecks([]);
+                          setAftercareProsText('');
+                          setAftercareConsText('');
+                        }
+                      }}
+                      className={cn(
+                        'group relative overflow-hidden rounded-2xl border-2 p-5 text-left transition-all duration-200',
+                        selected
+                          ? 'border-accent bg-gradient-to-br from-accent/10 via-accent/5 to-transparent shadow-md'
+                          : 'border-border bg-card hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-sm'
+                      )}
+                    >
+                      {selected ? (
+                        <div className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm">
+                          <Check className="h-4 w-4" strokeWidth={3} />
+                        </div>
+                      ) : null}
+                      <p className="mb-3 text-[34px] leading-none">{item.icon}</p>
+                      <p className="text-[15px] font-bold text-foreground">{item.label}</p>
+                      <p className="mt-1.5 text-caption leading-relaxed text-muted-foreground">{item.desc}</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -787,20 +818,24 @@ function WriteReviewPageContent() {
                 <div>
                   <p className="mb-2 text-body2 font-semibold">실제 등록 여부 *</p>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setRegistered(true)}
-                      className={`rounded-lg px-4 py-2 text-body2 ${registered === true ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}
-                    >
-                      예
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRegistered(false)}
-                      className={`rounded-lg px-4 py-2 text-body2 ${registered === false ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}
-                    >
-                      아니오
-                    </button>
+                    {([
+                      { value: true, label: '예, 등록까지 했어요' },
+                      { value: false, label: '아니오' }
+                    ] as const).map((opt) => (
+                      <button
+                        key={String(opt.value)}
+                        type="button"
+                        onClick={() => setRegistered(opt.value)}
+                        className={cn(
+                          'rounded-full px-5 py-2.5 text-body2 font-medium transition-all',
+                          registered === opt.value
+                            ? 'bg-accent text-accent-foreground shadow-sm'
+                            : 'border border-border bg-card text-foreground hover:border-accent/40 hover:bg-muted/40'
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -812,11 +847,12 @@ function WriteReviewPageContent() {
                         key={item.value}
                         type="button"
                         onClick={() => setConsultationMethod(item.value)}
-                        className={`rounded-lg px-3 py-2 text-body2 transition-colors ${
+                        className={cn(
+                          'rounded-full px-4 py-2 text-body2 font-medium transition-all',
                           consultationMethod === item.value
-                            ? 'bg-accent text-accent-foreground'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
+                            ? 'bg-accent text-accent-foreground shadow-sm'
+                            : 'border border-border bg-card text-foreground hover:border-accent/40 hover:bg-muted/40'
+                        )}
                       >
                         {item.label}
                       </button>
@@ -857,10 +893,15 @@ function WriteReviewPageContent() {
                               setConsultSchoolKeyword(school.name);
                               setShowConsultSchoolResult(false);
                             }}
-                            className="block w-full border-b border-border px-3 py-2 text-left last:border-none hover:bg-muted"
+                            className="block w-full border-b border-border px-3 py-2.5 text-left last:border-none hover:bg-muted/60"
                           >
-                            <p className="font-medium text-foreground">{school.name}</p>
-                            <p className="text-caption text-muted-foreground">{school.city}</p>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-medium text-foreground">{school.name}</p>
+                              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                {SCHOOL_TYPE_LABEL[school.type]}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-caption text-muted-foreground">{school.city}</p>
                           </button>
                         ))}
                         {consultSchoolKeyword.trim() && filteredConsultSchools.length === 0 ? (
@@ -998,10 +1039,15 @@ function WriteReviewPageContent() {
                               setFullSchoolKeyword(school.name);
                               setShowFullSchoolResult(false);
                             }}
-                            className="block w-full border-b border-border px-3 py-2 text-left last:border-none hover:bg-muted"
+                            className="block w-full border-b border-border px-3 py-2.5 text-left last:border-none hover:bg-muted/60"
                           >
-                            <p className="font-medium text-foreground">{school.name}</p>
-                            <p className="text-caption text-muted-foreground">{school.city}</p>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-medium text-foreground">{school.name}</p>
+                              <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                {SCHOOL_TYPE_LABEL[school.type]}
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-caption text-muted-foreground">{school.city}</p>
                           </button>
                         ))}
                         {fullSchoolKeyword.trim() && filteredFullSchools.length === 0 ? (
@@ -1043,20 +1089,24 @@ function WriteReviewPageContent() {
                 <div>
                   <p className="mb-2 text-body2 font-semibold">현재 상태 *</p>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setCurrentStatus('enrolled')}
-                      className={`rounded-lg px-4 py-2 text-body2 ${currentStatus === 'enrolled' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}
-                    >
-                      재학 중
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentStatus('graduated')}
-                      className={`rounded-lg px-4 py-2 text-body2 ${currentStatus === 'graduated' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'}`}
-                    >
-                      졸업·귀국
-                    </button>
+                    {([
+                      { value: 'enrolled', label: '🎓 재학 중' },
+                      { value: 'graduated', label: '🛬 졸업·귀국' }
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setCurrentStatus(opt.value)}
+                        className={cn(
+                          'rounded-full px-5 py-2.5 text-body2 font-medium transition-all',
+                          currentStatus === opt.value
+                            ? 'bg-accent text-accent-foreground shadow-sm'
+                            : 'border border-border bg-card text-foreground hover:border-accent/40 hover:bg-muted/40'
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -1118,75 +1168,117 @@ function WriteReviewPageContent() {
               <p className="text-body2 text-muted-foreground">선택한 후기 타입에 맞는 항목만 평가해줘요.</p>
             </div>
 
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              {scoreItems.map((item) => (
-                <div key={item.key} className="border-b border-border p-4 last:border-none">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="font-medium text-foreground">{item.label}</p>
-                    <span className="text-caption text-muted-foreground">가중치 {item.weight}</span>
+            <div className="space-y-3">
+              {scoreItems.map((item) => {
+                const value = scores[item.key] ?? 0;
+                return (
+                  <div key={item.key} className="rounded-xl border border-border bg-card p-4 transition-shadow hover:shadow-sm md:p-5">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="font-semibold text-foreground">{item.label}</p>
+                      {value > 0 ? (
+                        <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-caption font-bold text-accent">
+                          {value}.0
+                        </span>
+                      ) : null}
+                    </div>
+                    <StarRating
+                      value={value}
+                      onChange={(v) => setScores((prev) => ({ ...prev, [item.key]: v }))}
+                      size="lg"
+                    />
+                    {item.criteria ? (
+                      <div className="mt-3 grid gap-1.5 rounded-lg bg-muted/40 p-3 text-caption">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                          <span className="font-semibold text-foreground">1점</span>
+                          <span className="text-muted-foreground">{item.criteria.low}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                          <span className="font-semibold text-foreground">3점</span>
+                          <span className="text-muted-foreground">{item.criteria.mid}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                          <span className="font-semibold text-foreground">5점</span>
+                          <span className="text-muted-foreground">{item.criteria.high}</span>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                  <StarRating value={scores[item.key] ?? 0} onChange={(value) => setScores((prev) => ({ ...prev, [item.key]: value }))} size="lg" />
-                  {item.criteria ? (
-                    <p className="mt-2 text-caption text-muted-foreground">
-                      <span className="font-semibold">⭐ 1점</span> {item.criteria.low}
-                      <span className="mx-1.5 text-border">·</span>
-                      <span className="font-semibold">⭐⭐⭐ 3점</span> {item.criteria.mid}
-                      <span className="mx-1.5 text-border">·</span>
-                      <span className="font-semibold">⭐⭐⭐⭐⭐ 5점</span> {item.criteria.high}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* NPS — 추천 의향 (consultation/full 공통) */}
-            <div className="rounded-xl border border-border bg-card p-4">
+            <div className="rounded-xl border border-border bg-card p-4 md:p-5">
               <h2 className="mb-1 text-sm font-semibold text-foreground">🎯 추천 의향</h2>
-              <p className="mb-3 text-caption text-muted-foreground">
-                이 유학원을 친구에게 추천할까요? (0=절대 안 함 / 10=꼭 추천)
+              <p className="mb-4 text-caption text-muted-foreground">
+                이 유학원을 친구에게 추천할 의향이 있나요?
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {Array.from({ length: 11 }, (_, i) => i).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setNps(value)}
-                    className={cn(
-                      'h-10 w-10 rounded-lg border text-body2 font-semibold transition-colors',
-                      nps === value
-                        ? 'border-accent bg-accent text-accent-foreground'
-                        : 'border-border bg-background text-foreground hover:bg-muted/60'
-                    )}
-                  >
-                    {value}
-                  </button>
-                ))}
+              <div className="grid grid-cols-11 gap-1">
+                {Array.from({ length: 11 }, (_, i) => i).map((value) => {
+                  const tokens = npsColorTokens(value);
+                  const selected = nps === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setNps(value)}
+                      className={cn(
+                        'flex h-10 items-center justify-center rounded-lg text-body2 font-bold transition-all md:h-11',
+                        selected
+                          ? `${tokens.bgSelected} text-white shadow-md ring-2 ring-offset-1 ring-offset-card`
+                          : `${tokens.bgUnselected} ${tokens.textUnselected} hover:scale-105`,
+                        selected && tokens.bgSelected.replace('bg-', 'ring-')
+                      )}
+                    >
+                      {value}
+                    </button>
+                  );
+                })}
               </div>
-              {nps !== null ? (
-                <p className="mt-2 text-caption text-muted-foreground">
-                  {nps >= 9 ? '진짜 추천 (적극 옹호)' : nps >= 7 ? '추천 가능' : '추천 어려움'}
-                </p>
-              ) : null}
+              <div className="mt-2 flex justify-between px-0.5 text-[10px] text-muted-foreground">
+                <span>← 절대 추천 안 함</span>
+                <span>꼭 추천 →</span>
+              </div>
+              <div className="mt-3 flex items-center gap-3 text-caption">
+                <span className="inline-flex items-center gap-1.5 text-red-600">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
+                  0~6 비추
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-amber-700">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  7~8 보통
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  9~10 적극 추천
+                </span>
+              </div>
             </div>
 
             {/* 사후관리 평가 토글 (full 분기 한정) */}
             {reviewType === 'full' ? (
-              <div className="space-y-4 rounded-xl border border-orange-200 bg-[#FFF4E6] p-4">
+              <div className="space-y-4 rounded-2xl border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 p-4 md:p-5">
                 <div>
                   <h2 className="mb-1 text-sm font-semibold text-foreground">📞 사후관리 경험도 평가할까요? (선택)</h2>
                   <p className="text-caption text-muted-foreground">
                     학교 다니면서 받은 관리 경험이 있다면 추가로 평가해줘요. 받은 만큼만 평가하면 돼요.
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 md:flex-row">
                   <button
                     type="button"
                     onClick={() => setEvaluateAftercare(true)}
-                    className={`rounded-lg px-4 py-2 text-body2 ${
-                      evaluateAftercare ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'
-                    }`}
+                    className={cn(
+                      'flex-1 rounded-full px-5 py-2.5 text-body2 font-medium transition-all',
+                      evaluateAftercare
+                        ? 'bg-accent text-accent-foreground shadow-sm'
+                        : 'border border-border bg-card text-foreground hover:border-accent/40 hover:bg-muted/40'
+                    )}
                   >
-                    예, 평가할게요
+                    ✅ 예, 평가할게요
                   </button>
                   <button
                     type="button"
@@ -1194,41 +1286,58 @@ function WriteReviewPageContent() {
                       setEvaluateAftercare(false);
                       setAftercareScores({});
                     }}
-                    className={`rounded-lg px-4 py-2 text-body2 ${
-                      !evaluateAftercare ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground'
-                    }`}
+                    className={cn(
+                      'flex-1 rounded-full px-5 py-2.5 text-body2 font-medium transition-all',
+                      !evaluateAftercare
+                        ? 'bg-accent text-accent-foreground shadow-sm'
+                        : 'border border-border bg-card text-foreground hover:border-accent/40 hover:bg-muted/40'
+                    )}
                   >
-                    스킵할게요
+                    ⏭ 스킵할게요
                   </button>
                 </div>
 
                 {evaluateAftercare ? (
-                  <div className="space-y-2 rounded-xl border border-border bg-card">
-                    <div className="border-b border-border p-3">
-                      <p className="text-caption text-muted-foreground">사후관리 평점 (1=별로 / 5=최고)</p>
-                    </div>
-                    {aftercareScoreItems.map((item) => (
-                      <div key={item.key} className="border-b border-border p-4 last:border-none">
-                        <div className="mb-2 flex items-center justify-between">
-                          <p className="font-medium text-foreground">{item.label}</p>
-                          <span className="text-caption text-muted-foreground">가중치 {item.weight}</span>
+                  <div className="space-y-3">
+                    {aftercareScoreItems.map((item) => {
+                      const value = aftercareScores[item.key] ?? 0;
+                      return (
+                        <div key={item.key} className="rounded-xl border border-border bg-card p-4 transition-shadow hover:shadow-sm md:p-5">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <p className="font-semibold text-foreground">{item.label}</p>
+                            {value > 0 ? (
+                              <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-caption font-bold text-accent">
+                                {value}.0
+                              </span>
+                            ) : null}
+                          </div>
+                          <StarRating
+                            value={value}
+                            onChange={(v) => setAftercareScores((prev) => ({ ...prev, [item.key]: v }))}
+                            size="lg"
+                          />
+                          {item.criteria ? (
+                            <div className="mt-3 grid gap-1.5 rounded-lg bg-muted/40 p-3 text-caption">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
+                                <span className="font-semibold text-foreground">1점</span>
+                                <span className="text-muted-foreground">{item.criteria.low}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                                <span className="font-semibold text-foreground">3점</span>
+                                <span className="text-muted-foreground">{item.criteria.mid}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                                <span className="font-semibold text-foreground">5점</span>
+                                <span className="text-muted-foreground">{item.criteria.high}</span>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
-                        <StarRating
-                          value={aftercareScores[item.key] ?? 0}
-                          onChange={(value) => setAftercareScores((prev) => ({ ...prev, [item.key]: value }))}
-                          size="lg"
-                        />
-                        {item.criteria ? (
-                          <p className="mt-2 text-caption text-muted-foreground">
-                            <span className="font-semibold">⭐ 1점</span> {item.criteria.low}
-                            <span className="mx-1.5 text-border">·</span>
-                            <span className="font-semibold">⭐⭐⭐ 3점</span> {item.criteria.mid}
-                            <span className="mx-1.5 text-border">·</span>
-                            <span className="font-semibold">⭐⭐⭐⭐⭐ 5점</span> {item.criteria.high}
-                          </p>
-                        ) : null}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>
@@ -1313,40 +1422,31 @@ function WriteReviewPageContent() {
                 <p className="mt-1 text-caption text-muted-foreground">상담은 무료지만 추가로 청구된 비용이 있었는지 알려줘요</p>
               </div>
               <div className="flex flex-col gap-2 md:flex-row md:items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExtraCostOption('none');
-                    setExtraCostItems([]);
-                    setExtraCostOther('');
-                  }}
-                  className={cn(
-                    'flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-body2 transition-colors',
-                    extraCostOption === 'none'
-                      ? 'border-accent bg-accent/10 text-accent'
-                      : 'border-border bg-background text-foreground hover:bg-muted/60'
-                  )}
-                >
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10px]">
-                    {extraCostOption === 'none' ? '●' : ''}
-                  </span>
-                  <span>없었어요 (상담~등록까지 추가 비용 없었어요)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExtraCostOption('yes')}
-                  className={cn(
-                    'flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-body2 transition-colors',
-                    extraCostOption === 'yes'
-                      ? 'border-accent bg-accent/10 text-accent'
-                      : 'border-border bg-background text-foreground hover:bg-muted/60'
-                  )}
-                >
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10px]">
-                    {extraCostOption === 'yes' ? '●' : ''}
-                  </span>
-                  <span>있었어요</span>
-                </button>
+                {([
+                  { value: 'none' as const, label: '없었어요', desc: '상담~등록까지 추가 비용 없음' },
+                  { value: 'yes' as const, label: '있었어요', desc: '추가로 청구된 비용이 있음' }
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setExtraCostOption(opt.value);
+                      if (opt.value === 'none') {
+                        setExtraCostItems([]);
+                        setExtraCostOther('');
+                      }
+                    }}
+                    className={cn(
+                      'flex-1 rounded-xl border-2 px-4 py-3 text-left text-body2 transition-all',
+                      extraCostOption === opt.value
+                        ? 'border-accent bg-accent/5 shadow-sm'
+                        : 'border-border bg-card hover:border-accent/30 hover:bg-muted/40'
+                    )}
+                  >
+                    <p className="font-semibold text-foreground">{opt.label}</p>
+                    <p className="mt-0.5 text-caption text-muted-foreground">{opt.desc}</p>
+                  </button>
+                ))}
               </div>
 
               {extraCostOption === 'yes' ? (
@@ -1392,37 +1492,25 @@ function WriteReviewPageContent() {
                       <p className="text-sm font-semibold text-foreground">금액을 공개할 수 있나요?</p>
                       <p className="text-caption text-muted-foreground">공개하면 다른 유학생들에게 큰 도움이 돼요</p>
                     </div>
-                    <div className="flex flex-col gap-2 md:flex-row">
-                      <button
-                        type="button"
-                        onClick={() => setExtraCostIsPublic(true)}
-                        className={cn(
-                          'flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-body2 transition-colors',
-                          extraCostIsPublic === true
-                            ? 'border-accent bg-accent/10 text-accent'
-                            : 'border-border bg-background text-foreground hover:bg-muted/60'
-                        )}
-                      >
-                        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10px]">
-                          {extraCostIsPublic === true ? '●' : ''}
-                        </span>
-                        <span>공개할게요</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExtraCostIsPublic(false)}
-                        className={cn(
-                          'flex flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-body2 transition-colors',
-                          extraCostIsPublic === false
-                            ? 'border-accent bg-accent/10 text-accent'
-                            : 'border-border bg-background text-foreground hover:bg-muted/60'
-                        )}
-                      >
-                        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10px]">
-                          {extraCostIsPublic === false ? '●' : ''}
-                        </span>
-                        <span>비공개할게요</span>
-                      </button>
+                    <div className="flex gap-2">
+                      {([
+                        { value: true, label: '공개할게요' },
+                        { value: false, label: '비공개' }
+                      ] as const).map((opt) => (
+                        <button
+                          key={String(opt.value)}
+                          type="button"
+                          onClick={() => setExtraCostIsPublic(opt.value)}
+                          className={cn(
+                            'flex-1 rounded-full px-4 py-2 text-body2 font-medium transition-all',
+                            extraCostIsPublic === opt.value
+                              ? 'bg-accent text-accent-foreground shadow-sm'
+                              : 'border border-border bg-card text-foreground hover:border-accent/40 hover:bg-muted/40'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
                     </div>
                     {extraCostIsPublic === true ? (
                       <div className="mt-2 flex flex-col gap-2 md:flex-row md:items-center">
@@ -1589,22 +1677,45 @@ function WriteReviewPageContent() {
               <p className="mt-1 text-right text-caption text-muted-foreground">{summary.length}/100</p>
             </section>
 
-            <label className="flex items-start gap-2 rounded-lg border border-border bg-card p-3 text-body2 text-muted-foreground">
-              <input type="checkbox" checked={agreedPolicy} onChange={(event) => setAgreedPolicy(event.target.checked)} className="mt-1" />
-              <span>허위/광고성/개인정보 금지 원칙에 동의하고 사실 기반으로 작성했어요.</span>
+            <label
+              className={cn(
+                'flex cursor-pointer items-start gap-3 rounded-xl border-2 p-4 text-body2 transition-colors',
+                agreedPolicy
+                  ? 'border-accent/60 bg-accent/5 text-foreground'
+                  : 'border-border bg-card text-muted-foreground hover:bg-muted/40'
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={agreedPolicy}
+                onChange={(event) => setAgreedPolicy(event.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-accent"
+              />
+              <span>
+                허위/광고성/개인정보 노출 금지 원칙에 동의하고, <strong className="text-foreground">사실 기반으로 작성</strong>했어요.
+              </span>
             </label>
 
             <div className="flex gap-3">
-              <button type="button" onClick={() => setStep(2)} className="flex-1 rounded-lg bg-secondary px-6 py-4 font-semibold text-secondary-foreground">
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                className="flex-1 rounded-xl bg-secondary px-6 py-4 font-semibold text-secondary-foreground transition-colors hover:bg-muted"
+              >
                 이전
               </button>
               <button
                 type="button"
                 onClick={onSubmit}
                 disabled={!canSubmit}
-                className="flex-1 rounded-lg bg-accent px-6 py-4 font-semibold text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className={cn(
+                  'flex-[2] rounded-xl px-6 py-4 font-bold shadow-md transition-all',
+                  canSubmit
+                    ? 'bg-accent text-accent-foreground hover:shadow-lg active:scale-[0.99]'
+                    : 'cursor-not-allowed bg-muted text-muted-foreground'
+                )}
               >
-                {submitting ? '저장 중...' : '제출하기'}
+                {submitting ? '저장 중...' : '✍️ 후기 제출하기'}
               </button>
             </div>
           </div>
